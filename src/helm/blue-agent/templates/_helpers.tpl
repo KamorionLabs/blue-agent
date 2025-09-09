@@ -142,6 +142,9 @@ initContainers:
 {{- end }}
 terminationGracePeriodSeconds: {{ .Values.pipelines.timeout | int | required "A value for .Values.pipelines.timeout is required" }}
 restartPolicy: {{ .Args.restartPolicy }}
+{{- with .Values.hostUsers }}
+hostUsers: {{ . }}
+{{- end }}
 containers:
   {{- if .Values.sidecarContainers -}}
   {{- toYaml .Values.sidecarContainers | trim | nindent 2 }}

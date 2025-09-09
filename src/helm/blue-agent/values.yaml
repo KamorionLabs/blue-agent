@@ -163,6 +163,11 @@ tolerations: []
 # Pod affinity configuration
 affinity: {}
 
+# Use the host's user namespace.
+# This field is available starting with Kubernetes 1.27.
+# If unset, Kubernetes defaults to true.
+hostUsers: null
+
 # Number of revisions to keep in the history of the Deployment
 revisionHistoryLimit: 10
 

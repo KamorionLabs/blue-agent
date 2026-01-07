@@ -104,6 +104,8 @@ secret:
   azureKeyVault:
     # Indicates if the secret should be synced from Azure Key Vault with pod-managed identities (see: https://learn.microsoft.com/en-us/azure/aks/use-azure-ad-pod-identity)
     enabled: false
+    # Indicates if VM managed identity should be used
+    useVMManagedIdentity: null
     # ID of the Entra ID managed identity
     managedIdentityId: null
     # Name of the Azure Key Vault resource

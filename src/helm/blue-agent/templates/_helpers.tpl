@@ -329,8 +329,6 @@ volumes:
       readOnly: true
       volumeAttributes:
         secretProviderClass: {{ include "blue-agent.fullname" . }}-azure
-      nodePublishSecretRef:
-        name: {{ include "blue-agent.secretName" . }}
   {{- end }}
   {{- with .Values.extraVolumes }}
   # Custom volumes

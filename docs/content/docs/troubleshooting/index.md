@@ -35,6 +35,14 @@ This is normal behavior. The template agent:
 - Remains in the pool as a reference for KEDA scaling decisions
 - Should not be manually removed from the pool
 
+## Agents restart every minute when auto-scaling is disabled
+
+With `autoscaling.enabled: false`, the chart deploys long-lived agents through a Deployment. In Blue Agent 10.0.0 to 12.0.1, those agents were removed from the pool after 60 seconds without a job, then the container exited with `An error occurred: Not configured` and restarted in a loop.
+
+The idle timeout is meant for auto-scaled agents only, where a pod is started for a queued job and should be cleaned up quickly if nothing picks it up. It is now disabled on the Deployment: agents stay registered until they receive a job, then restart with a fresh workspace.
+
+If you run the container outside of the Helm chart, set the environment variable `AZP_IDLE_TIMEOUT=0` for long-lived agents. Any other value is the number of seconds to wait for a job before the agent is removed (default `60`).
+
 ## Pods are evicted by Kubernetes with the message `Pod ephemeral local storage usage exceeds the total limit of containers`
 
 This error is due to the fact that the default ephemeral storage limit is set to a lower value than the one used by the pipeline. You can fix it by setting the value to more than default value in `resources.limits.ephemeral-storage`.

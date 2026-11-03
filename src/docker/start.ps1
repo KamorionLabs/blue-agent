@@ -73,6 +73,8 @@ if ($azpAuth -eq "PAT") {
     Raise-Error "Missing AZP_TOKEN environment variable"
   }
   $authArgs = @("--auth", "PAT", "--token", $Env:AZP_TOKEN)
+  # The agent and the jobs it runs inherit this environment, the token is only needed to configure and remove the agent
+  Remove-Item Env:AZP_TOKEN
 } elseif ($azpAuth -eq "SP") {
   foreach ($name in @("AZP_CLIENT_ID", "AZP_CLIENT_SECRET", "AZP_TENANT_ID")) {
     $value = [Environment]::GetEnvironmentVariable($name)

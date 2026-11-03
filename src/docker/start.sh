@@ -90,6 +90,8 @@ case "${AZP_AUTH^^}" in
       exit 1
     fi
     auth_args=(--auth PAT --token "$AZP_TOKEN")
+    # The agent and the jobs it runs inherit this environment, the token is only needed to configure and remove the agent
+    unset AZP_TOKEN
     ;;
   SP)
     for name in AZP_CLIENT_ID AZP_CLIENT_SECRET AZP_TENANT_ID; do

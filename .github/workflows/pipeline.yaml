@@ -1,31 +1,40 @@
 name: pipeline
 
+# Publishing model (KamorionLabs fork):
+#   - Pull request: build and test; images are pushed only when the PR comes from this repository (fork PRs get a read-only token).
+#   - Push on "main": build, push "<flavor>-main", "<flavor>-sha-<sha>" and "<flavor>-<pre-release version>" images, sign them, deploy the docs.
+#   - Push of a "vX.Y.Z" tag: release. Push "<flavor>-X.Y.Z" (+ "<flavor>-X.Y", "<flavor>-X", "<flavor>-latest") images, publish the Helm chart to "oci://ghcr.io/<owner>/charts", create the GitHub release.
+#   - Manual dispatch on a release tag (see "rebuild.yaml"): rebuild and re-push the release images with fresh base images, the chart is not re-published.
+# Only "GITHUB_TOKEN" and GitHub OIDC (Sigstore keyless signing) are required. Docker Hub, ArtifactHub and Azure integration tests are opt-in through repository variables.
+
 on:
-  schedule:
-    - cron: 0 0 * * *
   push:
     branches:
-      - develop
-      - feat/*
-      - hotfix/*
       - main
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
   pull_request:
     branches:
-      - develop
-      - feat/*
-      - hotfix/*
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a release or a main build, only superseded PR builds
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Each job declares the minimum permissions it needs
+permissions: {}
 
 env:
-  CONTAINER_NAME: ${{ github.repository }}
-  CONTAINER_REGISTRY_GHCR: ghcr.io
-  CONTAINER_REGISTRY_DOCKER_HUB: docker.io
+  # Original project, used to make sure fork releases never reuse an upstream version
+  UPSTREAM_REPOSITORY: clemlesne/blue-agent
+  # Fork releases start at v13.0.0, upstream stopped at v12.0.1
+  FORK_FIRST_MAJOR: 13
+  # Optional Docker Hub mirror, enabled when the "DOCKER_HUB_REPOSITORY" repository variable is set (e.g. "kamorionlabs/blue-agent")
+  DOCKER_HUB_IMAGE: ${{ vars.DOCKER_HUB_REPOSITORY != '' && format('docker.io/{0}', vars.DOCKER_HUB_REPOSITORY) || '' }}
   # https://github.com/sigstore/cosign/releases
-  COSIGN_VERSION: 2.5.2
-  # https://npmjs.com/package/@microsoft/sarif-multitool?activeTab=versions
-  SARIF_MULTITOOL_VERSION: 4.5.4
-  # https://npmjs.com/package/snyk?activeTab=versions
-  SNYK_VERSION: 1.1297.3
+  COSIGN_VERSION: 3.1.4
   # https://github.com/microsoft/azure-pipelines-agent/releases
   AZP_AGENT_VERSION: 4.258.1
   # https://github.com/PowerShell/PowerShell/releases
@@ -60,34 +69,45 @@ env:
   PYTHON_313_VERSION_MAJOR_MINOR: 3.13
   PYTHON_313_VERSION_PATCH: 5
   # https://nodejs.org/en/download/releases
-  NODE_VERSION: 22.17.0
+  NODE_VERSION: 24.22.2
   # https://github.com/helm/helm/releases
-  HELM_VERSION: 3.18.4
+  HELM_VERSION: 4.3.1
   # https://github.com/oras-project/oras/releases
-  ORAS_VERSION: 1.2.3
+  ORAS_VERSION: 1.3.6
   # https://github.com/docker/buildx/releases
-  BUILDX_VERSION: 0.25.0
+  BUILDX_VERSION: 0.38.2
   # https://github.com/hadolint/hadolint/releases
-  HADOLINT_VERSION: 2.12.0
+  HADOLINT_VERSION: 2.15.1
   # https://learn.microsoft.com/en-us/visualstudio/releases/2022/release-history#fixed-version-bootstrappers
   # Note: Currently used is the LTSC 17.12
   VS_BUILDTOOLS_WIN_VERSION: 87b94407-0aa3-45fc-b53f-d224027a42b3/00e8cad9ef34839c57f9be8bc4f93c517804777bdef770e8dbdc8ba0e06bc348
   # https://github.com/gohugoio/hugo/releases
+  # Note: Kept in sync with the pinned Hextra theme submodule, bump both together
   HUGO_VERSION: 0.148.1
   # See: https://github.com/getsops/sops/releases
-  SOPS_VERSION: 3.10.2
+  SOPS_VERSION: 3.13.3
+  # https://github.com/aquasecurity/trivy/releases
+  TRIVY_VERSION: 0.76.1
 
 jobs:
   init:
     name: Initialize
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       BRANCH: ${{ steps.branch.outputs.branch }}
+      CHART_REGISTRY: ${{ steps.context.outputs.chart_registry }}
+      IMAGE: ${{ steps.context.outputs.image }}
+      LATEST: ${{ steps.context.outputs.latest }}
+      PUBLISH: ${{ steps.context.outputs.publish }}
+      RELEASE: ${{ steps.context.outputs.release }}
+      SIGN: ${{ steps.context.outputs.sign }}
       VERSION_FULL: ${{ steps.version.outputs.version_full }}
       VERSION: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # We need all Git history for "version.sh"
           fetch-depth: 0
@@ -106,12 +126,84 @@ jobs:
           branch=$(echo "${{ github.ref_name }}" | sed 's/\//-/g')
           echo "branch=$branch" >> $GITHUB_OUTPUT
 
+      - name: Context
+        id: context
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Registry paths must be lowercase, while the GitHub org name is not
+          repository="${GITHUB_REPOSITORY,,}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "image=ghcr.io/${repository}" >> $GITHUB_OUTPUT
+          echo "chart_registry=ghcr.io/${owner}/charts" >> $GITHUB_OUTPUT
+
+          # Pull requests from forks get a read-only token, build without pushing
+          publish=true
+          if [ "$EVENT_NAME" == "pull_request" ] && [ "$PR_HEAD_REPOSITORY" != "$GITHUB_REPOSITORY" ]; then
+            publish=false
+          fi
+          echo "publish=$publish" >> $GITHUB_OUTPUT
+
+          # Sign everything pushed outside of pull requests
+          sign=false
+          if [ "$publish" == "true" ] && [ "$EVENT_NAME" != "pull_request" ]; then
+            sign=true
+          fi
+          echo "sign=$sign" >> $GITHUB_OUTPUT
+
+          release=false
+          latest=false
+          if [ "$GITHUB_REF_TYPE" == "tag" ]; then
+            release=true
+
+            if [ "v${VERSION}" != "$GITHUB_REF_NAME" ]; then
+              echo "::error::Computed version v${VERSION} does not match tag ${GITHUB_REF_NAME}"
+              exit 1
+            fi
+
+            major="${VERSION%%.*}"
+            if [ "$major" -lt "$FORK_FIRST_MAJOR" ]; then
+              echo "::error::Fork releases must be >= v${FORK_FIRST_MAJOR}.0.0, versions below are owned by ${UPSTREAM_REPOSITORY}"
+              exit 1
+            fi
+
+            if git ls-remote --exit-code --tags "https://github.com/${UPSTREAM_REPOSITORY}.git" "refs/tags/${GITHUB_REF_NAME}" > /dev/null; then
+              echo "::error::Tag ${GITHUB_REF_NAME} also exists in ${UPSTREAM_REPOSITORY}, pick another version"
+              exit 1
+            fi
+
+            # Only the highest release moves the "latest" tags, a rebuild of an older release must not
+            highest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+            if [ "$highest" == "$GITHUB_REF_NAME" ]; then
+              latest=true
+            fi
+          fi
+          echo "release=$release" >> $GITHUB_OUTPUT
+          echo "latest=$latest" >> $GITHUB_OUTPUT
+
+          {
+            echo "### Context"
+            echo "| Key | Value |"
+            echo "| --- | --- |"
+            echo "| Version | \`${VERSION}\` |"
+            echo "| Image | \`ghcr.io/${repository}\` |"
+            echo "| Chart registry | \`oci://ghcr.io/${owner}/charts\` |"
+            echo "| Publish | ${publish} |"
+            echo "| Sign | ${sign} |"
+            echo "| Release | ${release} |"
+            echo "| Latest | ${latest} |"
+          } >> $GITHUB_STEP_SUMMARY
+
   sast-creds:
     name: SAST - Credentials
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # We need all Git history for testing credentials
           fetch-depth: 0
@@ -119,11 +211,85 @@ jobs:
           submodules: recursive
 
       - name: SAST - Credentials
-        uses: trufflesecurity/trufflehog@v3.89.2
+        uses: trufflesecurity/trufflehog@ea68ca03c865c5f324e86e849ced20ed3cf9dbbb # v3.99.8
+        # Without "base" and "head", the action scans the commits of the push or of the pull request
         with:
-          base: main
-          extra_args: --only-verified
-          head: HEAD~1
+          extra_args: --results=verified
+          # Pin the scanner image, the action defaults to "latest"
+          version: 3.99.8
+
+  sast-semgrep:
+    name: SAST - Semgrep
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    container:
+      # https://hub.docker.com/r/semgrep/semgrep/tags
+      image: semgrep/semgrep:1.183.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run tests
+        # Upload the SARIF to GitHub Security, but do not break the build
+        continue-on-error: true
+        env:
+          SEMGREP_RULES: p/cwe-top-25 p/owasp-top-ten p/kubernetes p/dockerfile
+        run: semgrep ci --sarif --output=semgrep.sarif
+
+      - name: Upload results to GitHub Security
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        continue-on-error: true
+        with:
+          category: semgrep
+          sarif_file: semgrep.sarif
+
+  static-test:
+    name: Static test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # Only used by the optional Azure login
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Required for running "helm" CLI
+      - name: Setup Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v${{ env.HELM_VERSION }}
+
+      # Required for running "npx" CLI
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Required for running "hadolint" CLI
+      - name: Setup Hadolint
+        run: |
+          sudo curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://github.com/hadolint/hadolint/releases/download/v${{ env.HADOLINT_VERSION }}/hadolint-Linux-x86_64 -o /usr/bin/hadolint
+          sudo chmod +x /usr/bin/hadolint
+          hadolint --version
+
+      - name: Run tests
+        run: make test-static
+
+      # Optional: validate the Bicep deployment against a real Azure subscription (OIDC, no secret)
+      - name: Login to Azure
+        if: vars.AZURE_CLIENT_ID != ''
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+
+      - name: Run Azure Bicep validate
+        if: vars.AZURE_CLIENT_ID != ''
+        run: make test-bicep
 
   build-helm:
     name: Build Helm chart
@@ -132,33 +298,18 @@ jobs:
       - sast-creds
       - sast-semgrep
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Required for running "helm" CLI
       - name: Setup Helm
-        uses: azure/setup-helm@v4.3.0
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v${{ env.HELM_VERSION }}
-
-      # Required for running "npx" CLI
-      - name: Setup Node
-        uses: actions/setup-node@v4.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      # Required for running "cosign" CLI
-      - name: Setup Cosign
-        # Only sign builds on main branch
-        if: github.ref == 'refs/heads/main'
-        uses: sigstore/cosign-installer@v3.9.1
-        with:
-          cosign-release: v${{ env.COSIGN_VERSION }}
-
-      - name: Prepare GPG key
-        run: |
-          echo "${{ secrets.GPG_KEYRING }}" | gpg --dearmor > keyring.gpg
 
       - name: Package Helm chart
         run: |
@@ -167,27 +318,11 @@ jobs:
           helm package \
             --app-version ${{ env.AZP_AGENT_VERSION }} \
             --destination .cr-release-packages \
-            --key 'Clémence Lesné' \
-            --keyring keyring.gpg \
-            --sign \
             --version ${{ needs.init.outputs.VERSION }} \
             src/helm/blue-agent
 
-      - name: Sign Helm chart
-        # Only sign builds on main branch
-        if: github.ref == 'refs/heads/main'
-        env:
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-        run: |
-          cosign sign-blob \
-            --bundle .cr-release-packages/blue-agent-${{ needs.init.outputs.VERSION }}.tgz.bundle \
-            --key="env://COSIGN_PRIVATE_KEY" \
-            --yes \
-            .cr-release-packages/blue-agent-${{ needs.init.outputs.VERSION }}.tgz
-
       - name: Upload Helm chart
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           if-no-files-found: error # Fail if no files are uploaded
           include-hidden-files: true # Folder begins with a dot, if not checked the whole folder is ignored
@@ -201,112 +336,112 @@ jobs:
             --values test/helm/blue-agent/values.yaml \
             .cr-release-packages/blue-agent-${{ needs.init.outputs.VERSION }}.tgz
 
-      - name: Run SAST Snyk for Helm
+      - name: Run Trivy misconfiguration scan for Helm
         # Upload the SARIF to GitHub Security, but do not break the build
         continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          npx --yes snyk@${{ env.SNYK_VERSION }} iac test \
-            --sarif-file-output=snyk.sarif \
-            --severity-threshold=medium \
-            .helm-template
-
-      # Fix issue "Error: Code Scanning could not process the submitted SARIF file: rejecting SARIF, as there are more runs than allowed (XX > 20)"
-      # See: https://github.com/github/codeql-action/issues/220
-      - name: Merge SARIF files
-        env:
-          # See: https://github.com/dotnet/core/issues/2186#issuecomment-1935707348
-          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "1"
-        run: |
-          npx --yes @microsoft/sarif-multitool@${{ env.SARIF_MULTITOOL_VERSION }} merge \
-            --automation-id ${{ github.run_id }} \
-            --merge-runs \
-            --output-file merged.sarif \
-            snyk.sarif
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          format: sarif
+          output: trivy.sarif
+          scan-ref: .helm-template
+          scan-type: config
+          severity: MEDIUM,HIGH,CRITICAL
+          version: v${{ env.TRIVY_VERSION }}
 
       - name: Upload results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3.29.2
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         continue-on-error: true
         with:
-          sarif_file: merged.sarif
+          category: trivy-helm
+          sarif_file: trivy.sarif
 
   release-helm:
     name: Release Helm chart
-    # Only deploy on non-scheduled main branch, as there is only one Helm repo and we cannot override an existing version
-    if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
+    # Only on a release tag push, a rebuild dispatch must not re-publish an existing chart version
+    if: needs.init.outputs.RELEASE == 'true' && github.event_name == 'push'
     needs:
       - build-helm
-      - merge-linux
       - build-release-win
+      - init
+      - merge-linux
       - static-test
     runs-on: ubuntu-24.04
+    permissions:
+      # Create the GitHub release
+      contents: write
+      # Push the chart to GHCR
+      packages: write
+      # Sigstore keyless signing
+      id-token: write
+    env:
+      CHART_FILE: blue-agent-${{ needs.init.outputs.VERSION }}.tgz
+      CHART_REGISTRY: ${{ needs.init.outputs.CHART_REGISTRY }}
+      VERSION: ${{ needs.init.outputs.VERSION }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4.2.2
-        with:
-          # Chart Releaser needs to have local access to "gh-pages" plus current branch
-          fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-
       - name: Download Helm chart
-        uses: actions/download-artifact@v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helm-chart
           path: .cr-release-packages
 
-      - name: Archive Helm chart
-        uses: helm/chart-releaser-action@v1.7.0
-        with:
-          charts_dir: src/helm
-          skip_packaging: true
-        env:
-          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CR_SKIP_EXISTING: true # Avoid overriding existing files, compat with the Hugo static site
-
-  static-test:
-    name: Static test
-    permissions:
-      contents: read
-      id-token: write
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.2.2
-
       # Required for running "helm" CLI
       - name: Setup Helm
-        uses: azure/setup-helm@v4.3.0
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v${{ env.HELM_VERSION }}
 
-      # Required for running "npx" CLI
-      - name: Setup Node
-        uses: actions/setup-node@v4.4.0
+      # Required for running "cosign" CLI
+      - name: Setup Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          cosign-release: v${{ env.COSIGN_VERSION }}
 
-      # Required for running "hadolint" CLI
-      - name: Setup Hadolint
+      - name: Login to registry (GitHub Container Registry)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sudo curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://github.com/hadolint/hadolint/releases/download/v${{ env.HADOLINT_VERSION }}/hadolint-Linux-x86_64 -o /usr/bin/hadolint
-          sudo chmod +x /usr/bin/hadolint
-          hadolint --version
+          echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          echo "$GITHUB_TOKEN" | cosign login ghcr.io --username "${{ github.actor }}" --password-stdin
 
-      # Required for linting Bicep files
-      - name: Login to Azure
-        uses: azure/login@v2.3.0
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      - name: Push Helm chart (OCI)
+        id: push
+        working-directory: .cr-release-packages
+        run: |
+          output=$(helm push "$CHART_FILE" "oci://${CHART_REGISTRY}" 2>&1)
+          echo "$output"
+          digest=$(echo "$output" | grep -oE 'sha256:[a-f0-9]{64}' | head -n 1)
+          if [ -z "$digest" ]; then
+            echo "::error::Cannot read the chart digest from the Helm output"
+            exit 1
+          fi
+          echo "digest=$digest" >> $GITHUB_OUTPUT
 
-      - name: Run tests
-        run: make test
+      - name: Sign Helm chart
+        working-directory: .cr-release-packages
+        run: |
+          # OCI artifact signature, verifiable with "cosign verify"
+          cosign sign --yes "${CHART_REGISTRY}/blue-agent@${{ steps.push.outputs.digest }}"
+          # Detached bundle for the archive attached to the GitHub release, verifiable with "cosign verify-blob"
+          cosign sign-blob --yes --bundle "${CHART_FILE}.sigstore.json" "$CHART_FILE"
+
+      - name: Create GitHub release
+        working-directory: .cr-release-packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v${VERSION}"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$tag" \
+              --generate-notes \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$tag" \
+              --verify-tag
+          fi
+          gh release upload "$tag" \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY" \
+            "$CHART_FILE" \
+            "${CHART_FILE}.sigstore.json"
 
   build-linux:
     name: Build image (Linux ${{ matrix.os }} - ${{ matrix.platform }})
@@ -315,6 +450,9 @@ jobs:
       - sast-creds
       - sast-semgrep
     runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -356,7 +494,7 @@ jobs:
             platform: linux/arm64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Container build take a lot of disk space, there is no enough space on the runner to have both tools cache and container build
       - name: Clean up disk
@@ -364,45 +502,59 @@ jobs:
 
       # Required to build multi-arch images
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3.6.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: ${{ matrix.platform }}
 
       # Required for "docker build" command
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3.11.1
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           version: v${{ env.BUILDX_VERSION }}
           driver-opts: |
             image=moby/buildkit:v${{ env.BUILDKIT_VERSION }}
 
       - name: Login to registry (GitHub Container Registry)
-        uses: docker/login-action@v3.4.0
+        if: needs.init.outputs.PUBLISH == 'true'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          registry: ${{ env.CONTAINER_REGISTRY_GHCR }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to registry (Docker Hub)
-        uses: docker/login-action@v3.4.0
+        if: needs.init.outputs.PUBLISH == 'true' && env.DOCKER_HUB_IMAGE != ''
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          registry: ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}
-          username: clemlesne
-          password: ${{ secrets.DOCKER_HUB_PAT }}
+          registry: docker.io
+          username: ${{ vars.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+      # Labels are baked into the per-platform image config here, "docker buildx imagetools create" in the merge job does not carry them
+      # See: https://github.com/clemlesne/blue-agent/issues/421
       - name: Container meta
         id: meta
-        uses: docker/metadata-action@v5.7.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
-            ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}
-            ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}/${{ env.CONTAINER_NAME }}
+            ${{ needs.init.outputs.IMAGE }}
+            ${{ env.DOCKER_HUB_IMAGE }}
           flavor: |
             prefix=${{ matrix.os }}-
+          labels: |
+            io.artifacthub.package.category=integration-delivery
+            io.artifacthub.package.keywords=agent,azure,azure-devops,azure-pipelines,container,devops,docker,helm,kubernetes,pipelines,self-hosted,self-hosted-agent,auto-scale,keda
+            io.artifacthub.package.license=Apache-2.0
+            io.artifacthub.package.logo-url=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docs/static/favicon.svg
+            io.artifacthub.package.maintainers=[{"name":"${{ github.repository_owner }}","email":"${{ github.repository_owner }}@users.noreply.github.com"}]
+            io.artifacthub.package.prerelease=${{ needs.init.outputs.RELEASE != 'true' }}
+            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/README.md
+            org.opencontainers.image.documentation=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v6.18.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           build-args: |
             AWS_CLI_VERSION=${{ env.AWS_CLI_VERSION }}
@@ -421,22 +573,22 @@ jobs:
             YQ_VERSION=${{ env.YQ_VERSION }}
           cache-from: |
             type=gha,scope=buildkit-${{ matrix.os }}-${{ matrix.platform }}-${{ github.ref_name }}
-            type=gha,scope=buildkit-${{ matrix.os }}-${{ matrix.platform }}-develop
             type=gha,scope=buildkit-${{ matrix.os }}-${{ matrix.platform }}-main
-          cache-to: type=gha,scope=buildkit-${{ matrix.os }}-${{ matrix.platform }}-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=buildkit-${{ matrix.os }}-${{ matrix.platform }}-${{ github.ref_name }}
           context: src/docker
           file: src/docker/Dockerfile-${{ matrix.os }}
           labels: ${{ steps.meta.outputs.labels }}
           # Force re-compression of all layers in ZSTD to lower the run latency in production (see: https://docs.docker.com/build/exporters/#compression)
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true,compression=zstd,compression-level=22,force-compression=true
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ needs.init.outputs.PUBLISH }},oci-mediatypes=true,compression=zstd,compression-level=22,force-compression=true
           platforms: ${{ matrix.platform }}
           provenance: true
           sbom: true
           tags: |
-            ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}
-            ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}/${{ env.CONTAINER_NAME }}
+            ${{ needs.init.outputs.IMAGE }}
+            ${{ env.DOCKER_HUB_IMAGE }}
 
       - name: Export digest
+        if: needs.init.outputs.PUBLISH == 'true'
         run: |
           mkdir -p ${{ runner.temp }}/digests
           digest="${{ steps.build.outputs.digest }}"
@@ -449,7 +601,8 @@ jobs:
           echo "name=digests-${{ matrix.os }}-${platform_safe}" >> $GITHUB_OUTPUT
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4.6.2
+        if: needs.init.outputs.PUBLISH == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.artifact-name.outputs.name }}
           path: ${{ runner.temp }}/digests/*
@@ -458,10 +611,17 @@ jobs:
 
   merge-linux:
     name: Release image (Linux ${{ matrix.os }})
+    if: needs.init.outputs.PUBLISH == 'true'
     needs:
       - init
       - build-linux
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      # Sigstore keyless signing
+      id-token: write
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -481,173 +641,132 @@ jobs:
             # Red Hat UBI 9
             ubi9,
           ]
+    env:
+      IMAGE: ${{ needs.init.outputs.IMAGE }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4.2.2
-
       - name: Download digests
-        uses: actions/download-artifact@v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-${{ matrix.os }}-*
           merge-multiple: true
 
-      # Required for running "npx" CLI
-      - name: Setup Node
-        uses: actions/setup-node@v4.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
       # Required for running "cosign" CLI
       - name: Setup Cosign
-        # Only sign builds on main branch
-        if: github.ref == 'refs/heads/main'
-        uses: sigstore/cosign-installer@v3.9.1
+        if: needs.init.outputs.SIGN == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v${{ env.COSIGN_VERSION }}
 
       - name: Login to registry (GitHub Container Registry)
-        uses: docker/login-action@v3.4.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          registry: ${{ env.CONTAINER_REGISTRY_GHCR }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to registry (Docker Hub)
-        uses: docker/login-action@v3.4.0
+        if: env.DOCKER_HUB_IMAGE != ''
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          registry: ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}
-          username: clemlesne
-          password: ${{ secrets.DOCKER_HUB_PAT }}
+          registry: docker.io
+          username: ${{ vars.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       # Required for "docker buildx imagetools" command
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3.11.1
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           version: v${{ env.BUILDX_VERSION }}
           driver-opts: |
             image=moby/buildkit:v${{ env.BUILDKIT_VERSION }}
 
-      - name: Check if pre-release
-        id: prerelease
-        run: |
-          if [ "${{ github.ref_name }}" == "main" ]; then
-            echo "prerelease=false" >> $GITHUB_OUTPUT
-          else
-            echo "prerelease=true" >> $GITHUB_OUTPUT
-          fi
-
+      # The Helm chart pulls "<repository>:<flavor>-<chart version>", keep the "<flavor>-" prefix on every tag
       - name: Container meta
         id: meta
-        uses: docker/metadata-action@v5.7.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
-            ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}
-            ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}/${{ env.CONTAINER_NAME }}
+            ${{ env.IMAGE }}
+            ${{ env.DOCKER_HUB_IMAGE }}
           flavor: |
+            latest=false
             prefix=${{ matrix.os }}-
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ needs.init.outputs.LATEST == 'true' }}
             type=ref,event=branch
             type=ref,event=pr
-            type=schedule
-            type=schedule,pattern={{date 'YYYYMMDD'}}
             type=semver,pattern={{version}},value=${{ needs.init.outputs.VERSION_FULL }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.init.outputs.VERSION_FULL }},enable=${{ needs.init.outputs.RELEASE == 'true' }}
+            type=semver,pattern={{major}},value=${{ needs.init.outputs.VERSION_FULL }},enable=${{ needs.init.outputs.RELEASE == 'true' }}
+            type=raw,value=${{ needs.init.outputs.VERSION }}-{{date 'YYYYMMDD'}},enable=${{ needs.init.outputs.RELEASE == 'true' }}
             type=sha,prefix=${{ matrix.os }}-sha-
-          labels: |
-            io.artifacthub.package.category=integration-delivery
-            io.artifacthub.package.keywords=agent,azure,azure-devops,azure-pipelines,container,devops,docker,helm,kubernetes,pipelines,self-hosted,self-hosted-agent,auto-scale,keda
-            io.artifacthub.package.license=Apache-2.0
-            io.artifacthub.package.logo-url=https://raw.githubusercontent.com/${{ env.CONTAINER_NAME }}/${{ github.sha }}/docs/static/favicon.svg
-            io.artifacthub.package.maintainers=[{"name":"${{ github.actor }}","email":"${{ github.actor }}@users.noreply.github.com"}]
-            io.artifacthub.package.prerelease=${{ steps.prerelease.outputs.prerelease }}
-            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ env.CONTAINER_NAME }}/${{ github.sha }}/README.md
-            org.opencontainers.image.documentation=https://github.com/${{ env.CONTAINER_NAME }}
-            org.opencontainers.image.vendor=${{ github.actor }}
 
       - name: Store tag
         id: tag
         run: |
-          ref="${{ github.ref }}"
-          branch=$(echo "${ref#refs/heads/}" | sed 's/\//-/g')
-          tag=$(echo "${{ steps.meta.outputs.tags }}" | grep -m1 $branch || echo "${{ steps.meta.outputs.tags }}" | grep -m1 sha)
+          tag=$(echo "${{ steps.meta.outputs.tags }}" | grep "^${IMAGE}:" | grep -m1 -- '-sha-')
           echo "tag=$tag" >> $GITHUB_OUTPUT
 
       - name: Create manifest list and push (GitHub Container Registry)
         working-directory: ${{ runner.temp }}/digests
         run: |
-          docker buildx imagetools create $(jq -cr '.tags | map(select(startswith("${{ env.CONTAINER_REGISTRY_GHCR }}")) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}@sha256:%s ' *)
+          docker buildx imagetools create $(jq -cr '.tags | map(select(startswith("${{ env.IMAGE }}:")) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
 
       - name: Create manifest list and push (Docker Hub)
+        if: env.DOCKER_HUB_IMAGE != ''
         working-directory: ${{ runner.temp }}/digests
         run: |
-          docker buildx imagetools create $(jq -cr '.tags | map(select(startswith("${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}")) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}/${{ env.CONTAINER_NAME }}@sha256:%s ' *)
+          docker buildx imagetools create $(jq -cr '.tags | map(select(startswith("${{ env.DOCKER_HUB_IMAGE }}:")) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.DOCKER_HUB_IMAGE }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ steps.tag.outputs.tag }}
 
-      # Cosign is voluntarily retried indefinitely to avoid breaking the build when the container registry is slow or throttle, with an exponential backoff delay with jitter
+      # Keyless signature (Sigstore, GitHub OIDC identity of this workflow), the image index is signed once by digest, "--recursive" also signs each platform manifest
+      # Cosign is retried to avoid breaking the build when the container registry is slow or throttle, with an exponential backoff delay with jitter
       # See: https://github.com/clemlesne/blue-agent/issues/264
       - name: Sign containers
-        # Only sign builds on main branch
-        if: github.ref == 'refs/heads/main'
-        env:
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        if: needs.init.outputs.SIGN == 'true'
         run: |
-          while IFS= read -r tag; do
-            echo "Signing $tag"
-            i=1
-            while true; do
-                cosign sign \
-                --key="env://COSIGN_PRIVATE_KEY" \
-                --recursive \
-                --yes \
-                $tag \
-                  && break
-                jitter=$(python3 -c "import random; print(random.randint(-20, 20))")
-                backoff=$(python3 -c "import math; print(int(math.pow(3, $i) * (1 + $jitter / 100)))")
-              echo "retry: cosign returned $?, backing off for $backoff seconds and trying again ($i)..."
+          digest=$(docker buildx imagetools inspect "${{ steps.tag.outputs.tag }}" --format '{{json .Manifest}}' | jq -r .digest)
+          for image in "$IMAGE" "$DOCKER_HUB_IMAGE"; do
+            [ -z "$image" ] && continue
+            ref="${image}@${digest}"
+            echo "Signing $ref"
+            for i in 1 2 3 4 5 6; do
+              cosign sign --recursive --yes "$ref" && break
+              if [ "$i" -eq 6 ]; then
+                echo "::error::Cannot sign $ref"
+                exit 1
+              fi
+              jitter=$(( RANDOM % 41 - 20 ))
+              backoff=$(( 3 ** i * (100 + jitter) / 100 ))
+              echo "retry: cosign failed, backing off for $backoff seconds and trying again ($i)..."
               sleep $backoff
-              i=$((i + 1))
             done
-          done <<< "${{ steps.meta.outputs.tags }}"
+          done
 
-      - name: Run SAST Snyk against containers
+      - name: Run Trivy vulnerability scan against containers
         # Upload the SARIF to GitHub Security, but do not break the build
         continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          npx --yes snyk@${{ env.SNYK_VERSION }} container test \
-            --exclude-base-image-vulns \
-            --fail-on=upgradable \
-            --file=src/docker/Dockerfile-${{ matrix.os }} \
-            --sarif-file-output=snyk.sarif \
-            --severity-threshold=medium \
-            ${{ steps.tag.outputs.tag }}
-
-      # Fix issue "Error: Code Scanning could not process the submitted SARIF file: rejecting SARIF, as there are more runs than allowed (XX > 20)"
-      # See: https://github.com/github/codeql-action/issues/220
-      - name: Merge SARIF files
-        env:
-          # See: https://github.com/dotnet/core/issues/2186#issuecomment-1935707348
-          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "1"
-        run: |
-          npx --yes @microsoft/sarif-multitool@${{ env.SARIF_MULTITOOL_VERSION }} merge \
-            --automation-id ${{ github.run_id }} \
-            --merge-runs \
-            --output-file merged.sarif \
-            snyk.sarif
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          format: sarif
+          ignore-unfixed: true
+          image-ref: ${{ steps.tag.outputs.tag }}
+          output: trivy.sarif
+          severity: MEDIUM,HIGH,CRITICAL
+          version: v${{ env.TRIVY_VERSION }}
 
       - name: Upload results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3.29.2
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         continue-on-error: true
         with:
-          sarif_file: merged.sarif
+          category: trivy-${{ matrix.os }}
+          sarif_file: trivy.sarif
 
   build-release-win:
     name: Build & release image (Windows ${{ matrix.os }})
@@ -656,6 +775,14 @@ jobs:
       - sast-creds
       - sast-semgrep
     runs-on: ${{ matrix.runs-on }}
+    defaults:
+      run:
+        shell: pwsh
+    permissions:
+      contents: read
+      packages: write
+      # Sigstore keyless signing
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -664,90 +791,88 @@ jobs:
             runs-on: windows-2022
           - os: win-ltsc2025
             runs-on: windows-2025
+    env:
+      IMAGE: ${{ needs.init.outputs.IMAGE }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Container build take a lot of disk space, there is no enough space on the runner to have both tools cache and container build
       - name: Clean up disk
         run: Remove-Item -Path C:\hostedtoolcache -Recurse -Force
 
-      # Required for running "npx" CLI
-      - name: Setup Node
-        uses: actions/setup-node@v4.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
       # Required for running "cosign" CLI
       - name: Setup Cosign
-        # Only sign builds on main branch
-        if: github.ref == 'refs/heads/main'
-        uses: sigstore/cosign-installer@v3.9.1
+        if: needs.init.outputs.SIGN == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v${{ env.COSIGN_VERSION }}
 
       - name: Login to registry (GitHub Container Registry)
-        uses: docker/login-action@v3.4.0
+        if: needs.init.outputs.PUBLISH == 'true'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          registry: ${{ env.CONTAINER_REGISTRY_GHCR }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to registry (Docker Hub)
-        uses: docker/login-action@v3.4.0
+        if: needs.init.outputs.PUBLISH == 'true' && env.DOCKER_HUB_IMAGE != ''
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          registry: ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}
-          username: clemlesne
-          password: ${{ secrets.DOCKER_HUB_PAT }}
-
-      - name: Check if pre-release
-        id: prerelease
-        run: |
-          if ('${{ github.ref_name }}' -eq 'main') {
-            echo "prerelease=false" >> $env:GITHUB_OUTPUT
-          } else {
-            echo "prerelease=true" >> $env:GITHUB_OUTPUT
-          }
+          registry: docker.io
+          username: ${{ vars.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Container meta
         id: meta
-        uses: docker/metadata-action@v5.7.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
-            ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}
-            ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}/${{ env.CONTAINER_NAME }}
+            ${{ env.IMAGE }}
+            ${{ env.DOCKER_HUB_IMAGE }}
           flavor: |
+            latest=false
             prefix=${{ matrix.os }}-
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ needs.init.outputs.LATEST == 'true' }}
             type=ref,event=branch
             type=ref,event=pr
-            type=schedule
-            type=schedule,pattern={{date 'YYYYMMDD'}}
             type=semver,pattern={{version}},value=${{ needs.init.outputs.VERSION_FULL }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.init.outputs.VERSION_FULL }},enable=${{ needs.init.outputs.RELEASE == 'true' }}
+            type=semver,pattern={{major}},value=${{ needs.init.outputs.VERSION_FULL }},enable=${{ needs.init.outputs.RELEASE == 'true' }}
+            type=raw,value=${{ needs.init.outputs.VERSION }}-{{date 'YYYYMMDD'}},enable=${{ needs.init.outputs.RELEASE == 'true' }}
             type=sha,prefix=${{ matrix.os }}-sha-
           labels: |
             io.artifacthub.package.category=integration-delivery
             io.artifacthub.package.keywords=agent,azure,azure-devops,azure-pipelines,container,devops,docker,helm,kubernetes,pipelines,self-hosted,self-hosted-agent,auto-scale,keda
             io.artifacthub.package.license=Apache-2.0
-            io.artifacthub.package.logo-url=https://raw.githubusercontent.com/${{ env.CONTAINER_NAME }}/${{ github.sha }}/docs/static/favicon.svg
-            io.artifacthub.package.maintainers=[{"name":"${{ github.actor }}","email":"${{ github.actor }}@users.noreply.github.com"}]
-            io.artifacthub.package.prerelease=${{ steps.prerelease.outputs.prerelease }}
-            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ env.CONTAINER_NAME }}/${{ github.sha }}/README.md
-            org.opencontainers.image.documentation=https://github.com/${{ env.CONTAINER_NAME }}
-            org.opencontainers.image.vendor=${{ github.actor }}
+            io.artifacthub.package.logo-url=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docs/static/favicon.svg
+            io.artifacthub.package.maintainers=[{"name":"${{ github.repository_owner }}","email":"${{ github.repository_owner }}@users.noreply.github.com"}]
+            io.artifacthub.package.prerelease=${{ needs.init.outputs.RELEASE != 'true' }}
+            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/README.md
+            org.opencontainers.image.documentation=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
 
-      - name: Store tag
-        id: tag
+      # Windows images are built with the classic Docker builder, which does not support "--cache-to", but can reuse layers from a pulled image with "--cache-from"
+      # See: https://github.com/clemlesne/blue-agent/issues/296
+      - name: Pull build cache
+        id: cache
+        continue-on-error: true
         run: |
-          $branch = "${{ github.ref }}".Substring("refs/heads/".Length).Replace("/", "-")
-          $tag = ('${{ steps.meta.outputs.tags }}').Split([Environment]::NewLine) | Where-Object { $_ -like "*$branch*" } | Select-Object -First 1
-          if (-not $tag) {
-            $tag = ('${{ steps.meta.outputs.tags }}').Split([Environment]::NewLine) | Where-Object { $_ -like "*sha*" } | Select-Object -First 1
+          $cacheRef = "${{ env.IMAGE }}:${{ matrix.os }}-main"
+          docker pull --quiet $cacheRef
+          if ($LASTEXITCODE -eq 0) {
+            echo "ref=$cacheRef" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No build cache available ($cacheRef)"
           }
-          echo "tag=$tag" >> $Env:GITHUB_OUTPUT
+          exit 0
 
       - name: Build & push container
+        env:
+          CACHE_REF: ${{ steps.cache.outputs.ref }}
+          PUBLISH: ${{ needs.init.outputs.PUBLISH }}
         run: |
           $params = @(
             # Required build arguments
@@ -769,12 +894,16 @@ jobs:
             "--file", "src/docker/Dockerfile-${{ matrix.os }}"
           )
 
-          $tags = ('${{ steps.meta.outputs.tags }}').Split([Environment]::NewLine)
+          if ($env:CACHE_REF) {
+            $params += "--cache-from", $env:CACHE_REF
+          }
+
+          $tags = ('${{ steps.meta.outputs.tags }}' -split "\r?\n") | Where-Object { $_ }
           foreach ($tag in $tags) {
             $params += "--tag", $tag
           }
 
-          $labels = ('${{ steps.meta.outputs.labels }}').Split([Environment]::NewLine)
+          $labels = ('${{ steps.meta.outputs.labels }}' -split "\r?\n") | Where-Object { $_ }
           foreach ($label in $labels) {
             $params += "--label", $label
           }
@@ -792,33 +921,38 @@ jobs:
 
           Write-Host "Building"
           docker build @params src\docker
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          if ($env:PUBLISH -ne 'true') {
+            Write-Host "Not pushing, pull request from a fork"
+            exit 0
+          }
 
           Write-Host "Pushing"
           foreach ($tag in $tags) {
             docker push --quiet $tag
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
-      # Cosign is voluntarily retried indefinitely to avoid breaking the build when the container registry is slow or throttle, with an exponential backoff delay with jitter
+      # Keyless signature (Sigstore, GitHub OIDC identity of this workflow), signed once per registry by digest
+      # Cosign is retried to avoid breaking the build when the container registry is slow or throttle, with an exponential backoff delay with jitter
       # See: https://github.com/clemlesne/blue-agent/issues/264
       - name: Sign containers
-        # Only sign builds on main branch
-        if: github.ref == 'refs/heads/main'
-        env:
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        if: needs.init.outputs.SIGN == 'true'
         run: |
-          $tags = ('${{ steps.meta.outputs.tags }}').Split([Environment]::NewLine)
-          foreach ($tag in $tags) {
-            Write-Host "Signing $tag"
+          $tags = ('${{ steps.meta.outputs.tags }}' -split "\r?\n") | Where-Object { $_ }
+          $refs = docker inspect --format '{{json .RepoDigests}}' $tags[0] | ConvertFrom-Json
+          foreach ($ref in $refs) {
+            Write-Host "Signing $ref"
             $i = 1
             while ($true) {
-              cosign sign `
-                --key="env://COSIGN_PRIVATE_KEY" `
-                --recursive `
-                --yes `
-                $tag
-              if ($?) {
+              cosign sign --yes $ref
+              if ($LASTEXITCODE -eq 0) {
                 break
+              }
+              if ($i -ge 6) {
+                Write-Host "::error::Cannot sign $ref"
+                exit 1
               }
               $jitter = (Get-Random -Minimum -20 -Maximum 21) / 100
               $backoff = [math]::Round([math]::Pow(3, $i) * (1 + $jitter))
@@ -828,122 +962,80 @@ jobs:
             }
           }
 
-      - name: Run SAST Snyk against containers
-        # Upload the SARIF to GitHub Security, but do not break the build
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          npx --yes snyk@${{ env.SNYK_VERSION }} container test `
-            --exclude-base-image-vulns `
-            --fail-on=upgradable `
-            --file=src/docker/Dockerfile-${{ matrix.os }} `
-            --sarif-file-output=snyk.sarif `
-            --severity-threshold=medium `
-            ${{ steps.tag.outputs.tag }}
-
-      # Fix issue "Error: Code Scanning could not process the submitted SARIF file: rejecting SARIF, as there are more runs than allowed (XX > 20)"
-      # See: https://github.com/github/codeql-action/issues/220
-      - name: Merge SARIF files
-        run: |
-          npx --yes @microsoft/sarif-multitool@${{ env.SARIF_MULTITOOL_VERSION }} merge `
-            --automation-id ${{ github.run_id }} `
-            --merge-runs `
-            --output-file merged.sarif `
-            snyk.sarif
-
-      - name: Upload results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3.29.2
-        continue-on-error: true
-        with:
-          sarif_file: merged.sarif
-
-  sast-semgrep:
-    name: SAST - Semgrep
-    runs-on: ubuntu-24.04
-    container:
-      image: returntocorp/semgrep
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.2.2
-
-      - name: Run tests
-        # Upload the SARIF to GitHub Security, but do not break the build
-        continue-on-error: true
-        env:
-          SEMGREP_RULES: p/cwe-top-25 p/owasp-top-ten p/kubernetes p/dockerfile
-        run: semgrep ci --sarif --output=semgrep.sarif
-
-      - name: Upload results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3.29.2
-        continue-on-error: true
-        with:
-          sarif_file: semgrep.sarif
-
   deploy-artifacthub-metadata:
     name: Deploy ArtifactHub metadata
-    # Only deploy on main branch, as we don't want to break verification with a bad metadata file during development
-    if: github.ref == 'refs/heads/main'
+    # Opt-in, once the repositories are registered on ArtifactHub (set "ARTIFACTHUB_CONTAINER_REPOSITORY_ID" and/or "ARTIFACTHUB_CHART_REPOSITORY_ID")
+    if: >-
+      needs.init.outputs.RELEASE == 'true'
+      && github.event_name == 'push'
+      && (vars.ARTIFACTHUB_CONTAINER_REPOSITORY_ID != '' || vars.ARTIFACTHUB_CHART_REPOSITORY_ID != '')
+    needs:
+      - init
+      - merge-linux
+      - release-helm
     runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    env:
+      CHART_REGISTRY: ${{ needs.init.outputs.CHART_REGISTRY }}
+      IMAGE: ${{ needs.init.outputs.IMAGE }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4.2.2
-
       # Required for running "oras" CLI
       - name: Setup ORAS
-        uses: oras-project/setup-oras@v1.2.3
+        uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
         with:
           version: ${{ env.ORAS_VERSION }}
 
       - name: Login to registry (GitHub Container Registry)
-        uses: docker/login-action@v3.4.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          registry: ${{ env.CONTAINER_REGISTRY_GHCR }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to registry (Docker Hub)
-        uses: docker/login-action@v3.4.0
-        with:
-          registry: ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}
-          username: clemlesne
-          password: ${{ secrets.DOCKER_HUB_PAT }}
-
-      - name: Push (GitHub Container Registry)
+      # See: https://artifacthub.io/docs/topics/repositories/
+      - name: Push (container repository)
+        if: vars.ARTIFACTHUB_CONTAINER_REPOSITORY_ID != ''
         run: |
+          printf 'repositoryID: %s\n' "${{ vars.ARTIFACTHUB_CONTAINER_REPOSITORY_ID }}" > artifacthub-repo.yml
           oras push \
-            ${{ env.CONTAINER_REGISTRY_GHCR }}/${{ env.CONTAINER_NAME }}:artifacthub.io \
+            "${IMAGE}:artifacthub.io" \
             artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml \
             --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml
 
-      - name: Push (Docker Hub)
+      - name: Push (Helm chart repository)
+        if: vars.ARTIFACTHUB_CHART_REPOSITORY_ID != ''
         run: |
+          printf 'repositoryID: %s\n' "${{ vars.ARTIFACTHUB_CHART_REPOSITORY_ID }}" > artifacthub-repo.yml
           oras push \
-            ${{ env.CONTAINER_REGISTRY_DOCKER_HUB }}/${{ env.CONTAINER_NAME }}:artifacthub.io \
+            "${CHART_REGISTRY}/blue-agent:artifacthub.io" \
             artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml \
             --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml
 
   update-docker-hub-description:
     name: Update Docker Hub description
-    # Only deploy on non-scheduled main branch, as there is only one Helm repo and we cannot override an existing version
-    if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
+    # Opt-in, only with the Docker Hub mirror
+    if: needs.init.outputs.RELEASE == 'true' && github.event_name == 'push' && vars.DOCKER_HUB_REPOSITORY != ''
     needs:
-      - merge-linux
       - build-release-win
+      - init
+      - merge-linux
       - static-test
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Push README
-        uses: peter-evans/dockerhub-description@v4.0.2
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
         with:
           enable-url-completion: true
-          password: ${{ secrets.DOCKER_HUB_PAT }}
-          repository: ${{ env.CONTAINER_NAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+          repository: ${{ vars.DOCKER_HUB_REPOSITORY }}
           short-description: ${{ github.event.repository.description }}
-          username: clemlesne
+          username: ${{ vars.DOCKER_HUB_USERNAME }}
 
   build-hugo:
     name: Build Hugo site
@@ -951,6 +1043,8 @@ jobs:
       - sast-creds
       - sast-semgrep
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       # Required for running "hugo" CLI
       - name: Setup Hugo CLI
@@ -963,14 +1057,10 @@ jobs:
         run: sudo snap install dart-sass
 
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           fetch-depth: 0
-
-      - name: Setup Pages
-        id: pages
-        uses: actions/configure-pages@v5.0.0
 
       - name: Build with Hugo
         working-directory: docs
@@ -979,60 +1069,41 @@ jobs:
           HUGO_ENVIRONMENT: production
           HUGO_ENV: production
         run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          name="${GITHUB_REPOSITORY#*/}"
           hugo \
             --gc \
             --minify \
-            --baseURL "${{ steps.pages.outputs.base_url }}/"
+            --baseURL "https://${owner}.github.io/${name}/"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          if-no-files-found: error # Fail if no files are uploaded
-          name: hugo
           path: docs/public
 
   deploy-hugo:
     name: Deploy Hugo site
     needs:
       - build-hugo
-      - init
       - static-test
-    # Only deploy on non-scheduled main branch, as there is only one Helm repo and we cannot override an existing version
-    if: (github.event_name != 'schedule') && (github.ref == 'refs/heads/main')
+    # Docs follow the trunk
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Pull from gh-pages
-        uses: actions/checkout@v4.2.2
-        with:
-          ref: gh-pages
-
-      - name: Clean previous Hugo build
-        run: |
-          # Clean all except Helm index
-          find . -type f -not -name "index.yaml" -not -path "*/.git/*" -delete
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4.3.0
-        with:
-          name: hugo
-
-      - name: Commit and push
-        run: |
-          # Configure git
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-
-          # Commit and push
-          if [[ -z "$(git status --porcelain)" ]]; then
-            echo "Nothing to commit"
-          else
-            git add .
-            git commit -m "Deploy Hugo site v${{ needs.init.outputs.VERSION }}"
-            git push origin gh-pages
-          fi
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
   integration-test-linux:
     name: Integration test (Linux ${{ matrix.os }})
+    # Opt-in: requires an Azure subscription (OIDC), an Azure DevOps organization and a re-encrypted "test/bicep/test.enc.json"
+    if: vars.INTEGRATION_TESTS == 'true' && needs.init.outputs.PUBLISH == 'true'
     permissions:
       contents: read
       id-token: write
@@ -1050,7 +1121,7 @@ jobs:
         os: [alpine, azurelinux3, bookworm, jammy, noble, ubi8, ubi9]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Required for running "sops" CLI
       - name: Setup SOPS
@@ -1061,17 +1132,19 @@ jobs:
 
       # Configure local configuration encryption key
       - name: Setup AGE key
+        env:
+          AGE_KEY: ${{ secrets.AGE_KEY }}
         run: |
           age_folder="$XDG_CONFIG_HOME/sops/age"
           mkdir -p ${age_folder}
-          echo "${{ secrets.AGE_KEY }}" > ${age_folder}/keys.txt
+          echo "$AGE_KEY" > ${age_folder}/keys.txt
 
       - name: Login to Azure
-        uses: azure/login@v2.3.0
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
 
       - name: Deploy Bicep
         run: |
@@ -1087,7 +1160,7 @@ jobs:
           # Recommended group membership: Project Collection Build Service Accounts
           AZURE_DEVOPS_EXT_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
           # See: https://learn.microsoft.com/en-us/cli/azure/devops/service-endpoint/github?view=azure-cli-latest#az-devops-service-endpoint-github-create
-          # Scope: clemlesne/blue-agent
+          # Scope: this repository
           # Permissions: contents (read-only); metadata (read-only); webhooks (read & write)
           AZURE_DEVOPS_EXT_GITHUB_PAT: ${{ secrets.AZURE_DEVOPS_GITHUB_PAT }}
         # Script wait indefinitely for external events, so we need to timeout

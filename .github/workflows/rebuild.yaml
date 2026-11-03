@@ -1,0 +1,33 @@
+name: rebuild
+
+# Base images regularly receive security fixes, rebuild the latest release monthly so "<flavor>-<version>" and "<flavor>-latest" images pick them up.
+# The pipeline is dispatched on the release tag, so the rebuild uses the workflow and the tool versions of that release. The Helm chart is not re-published.
+
+on:
+  schedule:
+    - cron: 17 4 1 * *
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  rebuild-latest-release:
+    name: Rebuild latest release
+    runs-on: ubuntu-24.04
+    permissions:
+      # Dispatch the "pipeline" workflow
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch pipeline on the latest release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2> /dev/null || true)
+          if [ -z "$tag" ]; then
+            echo "::notice::No release published yet, nothing to rebuild"
+            exit 0
+          fi
+          echo "Rebuilding $tag"
+          gh workflow run pipeline.yaml --repo "$GITHUB_REPOSITORY" --ref "$tag"
+          echo "Dispatched pipeline on \`$tag\`" >> $GITHUB_STEP_SUMMARY

@@ -191,7 +191,11 @@ else
   # Run the countdown for fast-clean if no job is using the agent after a delay
   # Disabled (0) for long-lived agents, e.g. when deployed without auto-scaling, otherwise the agent would be removed after the delay and the container would restart in a loop (see #361)
   idle_timeout="${AZP_IDLE_TIMEOUT:-60}"
-  if [ "$idle_timeout" -gt 0 ] 2>/dev/null; then
+  if ! [[ "$idle_timeout" =~ ^[0-9]+$ ]]; then
+    write_warning "Invalid AZP_IDLE_TIMEOUT value (${idle_timeout}), using the default of 60 seconds"
+    idle_timeout=60
+  fi
+  if [ "$idle_timeout" -gt 0 ]; then
     echo "Agent will be removed if no job is received within ${idle_timeout} seconds"
     sleep "$idle_timeout" && unregister &
   else

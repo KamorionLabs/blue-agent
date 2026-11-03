@@ -32,6 +32,10 @@ autoscaling:
   # Interval in seconds to poll for new jobs
   # Warning: A low value will cause rate limiting or throttling, and can cause high load on the Azure DevOps API
   pollingInterval: 10
+  # Seconds an auto-scaled agent waits for a job before it is removed from the pool and its pod exits, 0 disables it
+  # A KEDA job can be created for a queued pipeline job that another agent picks up first, this delay cleans it up
+  # Raise it to reduce agent churn when keeping warm agents (see "minReplicas")
+  idleTimeout: 60
 
 # Pipeline configuration
 pipelines:

@@ -162,7 +162,14 @@ if ($isTemplateJob) {
   try {
     # Run the countdown for fast-clean if no job is using the agent after a delay
     # Disabled (0) for long-lived agents, e.g. when deployed without auto-scaling, otherwise the agent would be removed after the delay and the container would restart in a loop (see #361)
-    $idleTimeout = if ($Env:AZP_IDLE_TIMEOUT) { [int]$Env:AZP_IDLE_TIMEOUT } else { 60 }
+    $idleTimeout = 60
+    if ($Env:AZP_IDLE_TIMEOUT) {
+      if ($Env:AZP_IDLE_TIMEOUT -match '^[0-9]+$') {
+        $idleTimeout = [int]$Env:AZP_IDLE_TIMEOUT
+      } else {
+        Write-Warning "Invalid AZP_IDLE_TIMEOUT value ($Env:AZP_IDLE_TIMEOUT), using the default of 60 seconds"
+      }
+    }
     if ($idleTimeout -gt 0) {
       Write-Host "Agent will be removed if no job is received within $idleTimeout seconds"
       Start-Job -ScriptBlock {

@@ -142,8 +142,11 @@ initContainers:
 {{- end }}
 terminationGracePeriodSeconds: {{ .Values.pipelines.timeout | int | required "A value for .Values.pipelines.timeout is required" }}
 restartPolicy: {{ .Args.restartPolicy }}
-{{- with .Values.hostUsers }}
-hostUsers: {{ . }}
+{{- if not (kindIs "invalid" .Values.hostUsers) }}
+{{- if and .Values.image.isWindows (not .Values.hostUsers) }}
+{{- fail "hostUsers: false (user namespaces) is only supported on Linux nodes, unset it for Windows agents" }}
+{{- end }}
+hostUsers: {{ .Values.hostUsers }}
 {{- end }}
 containers:
   {{- if .Values.sidecarContainers -}}

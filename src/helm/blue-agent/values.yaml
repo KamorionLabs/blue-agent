@@ -163,9 +163,11 @@ tolerations: []
 # Pod affinity configuration
 affinity: {}
 
-# Use the host's user namespace.
-# This field is available starting with Kubernetes 1.27.
-# If unset, Kubernetes defaults to true.
+# Use the host's user namespace, set to false to run the agent in its own user namespace (Linux only)
+# Root in the container is then mapped to an unprivileged user on the node
+# Requires Kubernetes >= 1.33 (or the UserNamespacesSupport feature gate), a compatible container runtime and kernel
+# See: https://kubernetes.io/docs/concepts/workloads/pods/user-namespaces/
+# If unset, Kubernetes defaults to true
 hostUsers: null
 
 # Number of revisions to keep in the history of the Deployment

@@ -9,7 +9,7 @@ spec:
   {{- if and .Values.secret.create .Values.secret.azureKeyVault.enabled (.Capabilities.APIVersions.Has "secrets-store.csi.x-k8s.io/v1") }}
   # Azure Key Vault secret authentication provider, for KEDA
   azureKeyVault:
-    vaultUri: https://{{ .Values.secret.azureKeyVault.name | quote | required "A value for .Values.secret.azureKeyVault.name is required" }}.vault.azure.net
+    vaultUri: {{ printf "https://%s.vault.azure.net" (.Values.secret.azureKeyVault.name | required "A value for .Values.secret.azureKeyVault.name is required") | quote }}
     podIdentity:
       provider: azure-workload
       identityId: {{ .Values.secret.azureKeyVault.managedIdentityId | quote | required "A value for .Values.secret.azureKeyVault.managedIdentityId is required" }}

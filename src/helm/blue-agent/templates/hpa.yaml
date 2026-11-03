@@ -62,6 +62,7 @@ spec:
         {{- $data := dict
           "azpAgentName" (dict "valueFrom" (dict "fieldRef" (dict "apiVersion" "v1" "fieldPath" "metadata.name" )))
           "isTemplateJob" "0"
+          "idleTimeout" (required "A value for .Values.autoscaling.idleTimeout is required" .Values.autoscaling.idleTimeout | int | toString)
           "restartPolicy" "Never"
         }}
         {{- include "blue-agent.podSharedTemplate" (merge (dict "Args" $data) . ) | nindent 8 }}

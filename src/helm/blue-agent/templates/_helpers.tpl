@@ -121,8 +121,11 @@ Usage example:
 {{- $data := dict
   "azpAgentName" (dict "value" (include "blue-agent.fullname" .))
   "isTemplateJob" "1"
+  "idleTimeout" "0"
   "restartPolicy" "Always"
 }}
+
+"idleTimeout" is optional: when set, it is passed to the agent as AZP_IDLE_TIMEOUT (seconds before an idle agent is removed, 0 disables). Omit it to keep the container default.
 {{- include "blue-agent.podSharedTemplate" (merge (dict "Args" $data) . ) | nindent 6 }}
 */}}
 {{- define "blue-agent.podSharedTemplate" -}}
@@ -216,6 +219,11 @@ containers:
             key: personalAccessToken
       - name: AZP_TEMPLATE_JOB
         value: {{ .Args.isTemplateJob | quote }}
+      {{- if hasKey .Args "idleTimeout" }}
+      # Seconds to wait for a job before removing an idle agent, 0 disables the idle timeout
+      - name: AZP_IDLE_TIMEOUT
+        value: {{ .Args.idleTimeout | quote }}
+      {{- end }}
       # Capabilities: START
       # Note: Used to filter the agents that are triggered by the KEDA scaler, allowing developers to select the right agent for their job.
       # OS flavor

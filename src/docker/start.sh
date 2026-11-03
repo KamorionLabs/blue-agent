@@ -13,11 +13,12 @@ set -e
 # - KEDA uses the template agent as a reference for scaling decisions
 # - This prevents scaling errors when no agents are initially available
 #
-# Agent is always registered. It is removed from the server only when the agent is not a template job. After 60 secs, it tries to shut down the agent gracefully, waiting for the current job to finish, if any.
+# Agent is always registered. It is removed from the server only when the agent is not a template job. After AZP_IDLE_TIMEOUT secs without a job (default 60), it tries to shut down the agent gracefully, waiting for the current job to finish, if any. Long-lived agents (Helm chart with auto-scaling disabled) set AZP_IDLE_TIMEOUT=0 to stay registered until they receive a job.
 #
 # Environment variables:
 # - AZP_AGENT_NAME: Agent name (default: hostname)
 # - AZP_CUSTOM_CERT_PEM: Custom SSL certificates directory (default: empty)
+# - AZP_IDLE_TIMEOUT: Seconds to wait for a job before removing an idle agent (default: 60) - 0 disables the idle timeout
 # - AZP_POOL: Agent pool name
 # - AZP_TEMPLATE_JOB: Template job flag (default: 0) - when set to 1, creates template container
 # - AZP_TOKEN: Personal access token
@@ -188,7 +189,18 @@ else
   # Unregister on SIGTERM
   trap 'unregister; exit 143' TERM
   # Run the countdown for fast-clean if no job is using the agent after a delay
-  sleep 60 && unregister &
+  # Disabled (0) for long-lived agents, e.g. when deployed without auto-scaling, otherwise the agent would be removed after the delay and the container would restart in a loop (see #361)
+  idle_timeout="${AZP_IDLE_TIMEOUT:-60}"
+  if ! [[ "$idle_timeout" =~ ^[0-9]+$ ]]; then
+    write_warning "Invalid AZP_IDLE_TIMEOUT value (${idle_timeout}), using the default of 60 seconds"
+    idle_timeout=60
+  fi
+  if [ "$idle_timeout" -gt 0 ]; then
+    echo "Agent will be removed if no job is received within ${idle_timeout} seconds"
+    sleep "$idle_timeout" && unregister &
+  else
+    echo "Idle timeout disabled, agent stays registered until it receives a job"
+  fi
   # Run the agent
   bash run-docker.sh "$@" --once &
 fi

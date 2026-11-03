@@ -165,6 +165,18 @@ extraNodeSelectors: {}
 tolerations: []
 
 # Pod affinity configuration
+#
+# Example, prefer spot nodes provisioned by Karpenter, falling back to on-demand nodes:
+#
+# affinity:
+#   nodeAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#       - weight: 100
+#         preference:
+#           matchExpressions:
+#             - key: karpenter.sh/capacity-type
+#               operator: In
+#               values: ["spot"]
 affinity: {}
 
 # Use the host's user namespace, set to false to run the agent in its own user namespace (Linux only)
@@ -173,6 +185,22 @@ affinity: {}
 # See: https://kubernetes.io/docs/concepts/workloads/pods/user-namespaces/
 # If unset, Kubernetes defaults to true
 hostUsers: null
+
+# Pod topology spread constraints, templated (e.g. to reuse the chart selector labels)
+#
+# Example, spread agents across zones:
+#
+# topologySpreadConstraints:
+#   - maxSkew: 1
+#     topologyKey: topology.kubernetes.io/zone
+#     whenUnsatisfiable: ScheduleAnyway
+#     labelSelector:
+#       matchLabels:
+#         app.kubernetes.io/instance: "{{ .Release.Name }}"
+topologySpreadConstraints: []
+
+# Priority class of the agent pods, empty uses the cluster default
+priorityClassName: ""
 
 # Number of revisions to keep in the history of the Deployment
 revisionHistoryLimit: 10

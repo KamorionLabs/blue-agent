@@ -75,6 +75,28 @@ Create the name of the Secret to use.
 {{- end }}
 
 {{/*
+Validated authentication type of the agent, "pat" or "servicePrincipal".
+*/}}
+{{- define "blue-agent.agentAuthType" -}}
+{{- $type := .Values.pipelines.auth.type | default "pat" }}
+{{- if not (has $type (list "pat" "servicePrincipal")) }}
+{{- fail (printf "Unsupported .Values.pipelines.auth.type %q, use \"pat\" or \"servicePrincipal\"" $type) }}
+{{- end }}
+{{- $type }}
+{{- end }}
+
+{{/*
+Validated authentication type of KEDA, "pat", "servicePrincipal" or "workloadIdentity", defaults to the agent one.
+*/}}
+{{- define "blue-agent.kedaAuthType" -}}
+{{- $type := .Values.autoscaling.auth.type | default (include "blue-agent.agentAuthType" .) }}
+{{- if not (has $type (list "pat" "servicePrincipal" "workloadIdentity")) }}
+{{- fail (printf "Unsupported .Values.autoscaling.auth.type %q, use \"pat\", \"servicePrincipal\" or \"workloadIdentity\"" $type) }}
+{{- end }}
+{{- $type }}
+{{- end }}
+
+{{/*
 Default PodSecurytyContext object to apply to containers.
 
 Can be overriden by setting ".Values.podSecurityContext".
@@ -197,9 +219,9 @@ containers:
         {{- else }}
         value: /app-root/azp-logs
         {{- end }}
-      # Hide the agent PAT from the logs, for obvious security reasons
+      # Hide the agent credentials from the capabilities, for obvious security reasons
       - name: VSO_AGENT_IGNORE
-        value: AZP_TOKEN
+        value: AZP_TOKEN,AZP_CLIENT_SECRET
       {{- if not .Values.image.isWindows }}
       # Allow agent to run as root (Linux only)
       - name: AGENT_ALLOW_RUNASROOT
@@ -234,7 +256,20 @@ containers:
       # Azure DevOps org pool name
       - name: AZP_POOL
         value: {{ .Values.pipelines.poolName | quote | required "A value for .Values.pipelines.poolName is required" }}
-      {{- if not (and .Values.secret.create .Values.secret.azureKeyVault.enabled (.Capabilities.APIVersions.Has "secrets-store.csi.x-k8s.io/v1")) }}
+      {{- if eq (include "blue-agent.agentAuthType" .) "servicePrincipal" }}
+      # Azure DevOps service principal allowing the agent to register itself to the pool
+      - name: AZP_AUTH
+        value: SP
+      - name: AZP_CLIENT_ID
+        value: {{ .Values.pipelines.auth.clientId | required "A value for .Values.pipelines.auth.clientId is required" | quote }}
+      - name: AZP_TENANT_ID
+        value: {{ .Values.pipelines.auth.tenantId | required "A value for .Values.pipelines.auth.tenantId is required" | quote }}
+      - name: AZP_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: {{ include "blue-agent.secretName" . }}
+            key: clientSecret
+      {{- else if not (and .Values.secret.create .Values.secret.azureKeyVault.enabled (.Capabilities.APIVersions.Has "secrets-store.csi.x-k8s.io/v1")) }}
       # Azure DevOps PAT allowing the agent to register itself to the pool
       - name: AZP_TOKEN
         valueFrom:

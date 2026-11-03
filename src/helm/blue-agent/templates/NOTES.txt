@@ -6,7 +6,7 @@ Checks:
 {{- else if .Values.secret.create -}}
 ⚠️ Secrets are written as is in Secret objects, be careful to your RBAC.
 {{- else -}}
-⚠️ You choose to manually manage the secrets, remember to 1) create the object {{ include "blue-agent.secretName" . | quote }} and 2) to include the fields "personalAccessToken" and "organizationURL".
+⚠️ You choose to manually manage the secrets, remember to 1) create the object {{ include "blue-agent.secretName" . | quote }} and 2) to include the fields "organizationURL" and {{ if eq (include "blue-agent.agentAuthType" .) "servicePrincipal" }}"clientSecret"{{ else }}"personalAccessToken"{{ end }}{{ if and .Values.autoscaling.enabled (ne (include "blue-agent.kedaAuthType" .) (include "blue-agent.agentAuthType" .)) (has (include "blue-agent.kedaAuthType" .) (list "pat" "servicePrincipal")) }}, plus {{ if eq (include "blue-agent.kedaAuthType" .) "pat" }}"personalAccessToken"{{ else }}"clientSecret"{{ end }} for KEDA{{ end }}.
 {{- end -}}
 {{- if and (.Values.autoscaling.enabled) (.Capabilities.APIVersions.Has "keda.sh/v1alpha1") -}}
 ✅ KEDA detected, your pipelines agents will scaled based on your usage.

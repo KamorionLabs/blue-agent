@@ -14,11 +14,16 @@
 #
 # Environment variables:
 # - AZP_AGENT_NAME: Agent name (default: hostname)
+# - AZP_AUTH: Authentication used to register the agent, "PAT" or "SP" for a Microsoft Entra service principal (default: PAT)
+# - AZP_CLIENT_ID: Service principal client ID (AZP_AUTH=SP)
+# - AZP_CLIENT_SECRET: Service principal client secret (AZP_AUTH=SP)
+# - AZP_CLIENT_SECRET_FILE: File containing the service principal client secret, used when AZP_CLIENT_SECRET is not set (default: empty)
 # - AZP_CUSTOM_CERT_PEM: Custom SSL certificates directory (default: empty)
 # - AZP_IDLE_TIMEOUT: Seconds to wait for a job before removing an idle agent (default: 60) - 0 disables the idle timeout
 # - AZP_POOL: Agent pool name
 # - AZP_TEMPLATE_JOB: Template job flag (default: 0) - when set to 1, creates template container
-# - AZP_TOKEN: Personal access token
+# - AZP_TENANT_ID: Service principal tenant ID (AZP_AUTH=SP)
+# - AZP_TOKEN: Personal access token (AZP_AUTH=PAT)
 # - AZP_TOKEN_FILE: File containing the personal access token, used when AZP_TOKEN is not set (default: empty)
 # - AZP_URL: Server URL
 # - AZP_URL_FILE: File containing the server URL, used when AZP_URL is not set (default: empty)
@@ -46,7 +51,7 @@ function Raise-Error() {
 
 # Read a variable from the file named by "<name>_FILE" when the variable itself is empty
 # Used with files mounted by the Secrets Store CSI Driver, which do not depend on a synchronized Kubernetes Secret
-foreach ($name in @("AZP_URL", "AZP_TOKEN")) {
+foreach ($name in @("AZP_URL", "AZP_TOKEN", "AZP_CLIENT_SECRET")) {
   $value = [Environment]::GetEnvironmentVariable($name)
   $file = [Environment]::GetEnvironmentVariable("${name}_FILE")
   if (($null -eq $value -or $value -eq "") -and ($null -ne $file -and $file -ne "")) {
@@ -61,8 +66,38 @@ if ($null -eq $Env:AZP_URL -or $Env:AZP_URL -eq "") {
   Raise-Error "Missing AZP_URL environment variable"
 }
 
-if ($null -eq $Env:AZP_TOKEN -or $Env:AZP_TOKEN -eq "") {
-  Raise-Error "Missing AZP_TOKEN environment variable"
+$azpAuth = if ($null -eq $Env:AZP_AUTH -or $Env:AZP_AUTH -eq "") { "PAT" } else { $Env:AZP_AUTH.ToUpper() }
+$clientSecret = $null
+if ($azpAuth -eq "PAT") {
+  if ($null -eq $Env:AZP_TOKEN -or $Env:AZP_TOKEN -eq "") {
+    Raise-Error "Missing AZP_TOKEN environment variable"
+  }
+  $authArgs = @("--auth", "PAT", "--token", $Env:AZP_TOKEN)
+} elseif ($azpAuth -eq "SP") {
+  foreach ($name in @("AZP_CLIENT_ID", "AZP_CLIENT_SECRET", "AZP_TENANT_ID")) {
+    $value = [Environment]::GetEnvironmentVariable($name)
+    if ($null -eq $value -or $value -eq "") {
+      Raise-Error "Missing $name environment variable, required with AZP_AUTH=SP"
+    }
+  }
+  # The client secret is passed through the environment, not the command line, and only to the configuration commands
+  $authArgs = @("--auth", "SP", "--clientid", $Env:AZP_CLIENT_ID, "--tenantid", $Env:AZP_TENANT_ID)
+  $clientSecret = $Env:AZP_CLIENT_SECRET
+  Remove-Item Env:AZP_CLIENT_SECRET
+} else {
+  Raise-Error "Unsupported AZP_AUTH value ($Env:AZP_AUTH), use PAT or SP"
+}
+
+# Run the agent configuration script with the authentication arguments
+function Invoke-Config {
+  if ($null -ne $clientSecret) {
+    $Env:VSTS_AGENT_INPUT_CLIENTSECRET = $clientSecret
+  }
+  try {
+    & config.cmd @Args @authArgs
+  } finally {
+    Remove-Item Env:VSTS_AGENT_INPUT_CLIENTSECRET -ErrorAction SilentlyContinue
+  }
 }
 
 if ($null -eq $Env:AZP_POOL -or $Env:AZP_POOL -eq "") {
@@ -104,9 +139,7 @@ function Unregister {
   while ($true) {
     try {
       # If the agent is removed successfully, exit the loop
-      & config.cmd remove `
-        --auth PAT `
-        --token $Env:AZP_TOKEN `
+      Invoke-Config remove `
         --unattended
       break
     } catch {
@@ -147,14 +180,12 @@ Write-Header "Configuring agent"
 
 Set-Location $(Split-Path -Parent $MyInvocation.MyCommand.Definition)
 
-& config.cmd `
+Invoke-Config `
   --acceptTeeEula `
   --agent $Env:AZP_AGENT_NAME `
-  --auth PAT `
   --gitUseSChannel `
   --pool $Env:AZP_POOL `
   --replace `
-  --token $Env:AZP_TOKEN `
   --unattended `
   --url $Env:AZP_URL `
   --work $Env:AZP_WORK

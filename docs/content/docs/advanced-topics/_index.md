@@ -20,5 +20,6 @@ Explore the following sections to learn how to use Blue Agent:
 {{< card link="provided-software" title="Provided software" icon="cube" >}}
 {{< card link="proxy" title="Proxy" icon="shield-check" >}}
 {{< card link="scaling" title="Scaling" icon="trending-up" >}}
+{{< card link="service-principal" title="Service principal" icon="key" >}}
 {{< card link="spot-instances" title="Spot instances" icon="lightning-bolt" >}}
 {{< /cards >}}

@@ -38,7 +38,7 @@ Helm is a package manager for Kubernetes, allowing to easily deploy applications
 | `initContainers`                         | Init containers for the agent pod                                                                                                                                                                                                                                                                       | `[]`                                                                                                                                                            |
 | `nameOverride`                           | Overrides release name                                                                                                                                                                                                                                                                                  | `""`                                                                                                                                                            |
 | `pipelines.cache.size`                   | Total cache to attach to the Azure Pipelines standard directory; by default, [same amount as the Microsoft Hosted agents](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/hosted?view=azure-devops&tabs=yaml#hardware)                                                                  | `10Gi`                                                                                                                                                          |
-| `pipelines.cache.type`                   | Disk type to attach to the Azure Pipelines standard directory; see your cloud provider for types ([Azure](https://learn.microsoft.com/en-us/azure/aks/concepts-storage#storage-classes), [AWS](https://docs.aws.amazon.com/eks/latest/userguide/storage-classes.html))                                  | `managed-csi` (Azure compatible)                                                                                                                                |
+| `pipelines.cache.type`                   | StorageClass of the volume attached to the Azure Pipelines standard directory, e.g. `managed-csi-premium` on AKS or `gp3` on EKS; empty uses the cluster default StorageClass ([see storage](#storage))                                                                                                 | _None_ (cluster default)                                                                                                                                        |
 | `pipelines.cache.volumeEnabled`          | Enabled by default, can be disabled if your CSI driver doesn't support ephemeral storage ([exhaustive list](https://kubernetes-csi.github.io/docs/drivers.html)); if disabled, it is advised to allow >= 10Gi of ephemeral storage usage (see `resources`)                                              | `true`                                                                                                                                                          |
 | `pipelines.capabilities`                 | Add [demands/capabilities](https://learn.microsoft.com/en-us/azure/devops/pipelines/process/demands?view=azure-devops&tabs=yaml) to the agent                                                                                                                                                           | `[]`                                                                                                                                                            |
 | `pipelines.cleanup.failed`               | Maximum of failed Jobs to keep from Kubernetes API server ([see doc](https://keda.sh/docs/2.11/concepts/scaling-jobs/#scaledjob-spec)); only applied to autoscaled deployments (see `autoscaling.enabled`)                                                                                              | `100`                                                                                                                                                           |
@@ -49,7 +49,7 @@ Helm is a package manager for Kubernetes, allowing to easily deploy applications
 | `pipelines.poolName`                     | Agent pool name to which the agent should register                                                                                                                                                                                                                                                      | _None_                                                                                                                                                          |
 | `pipelines.timeout`                      | Time in seconds after a agent will be stopped, the same amount of time is applied as a timeout for the system to shut down                                                                                                                                                                              | `3600` (1 hour)                                                                                                                                                 |
 | `pipelines.tmpdir.size`                  | Total size of the [standard `TMPDIR` directory](https://en.wikipedia.org/wiki/TMPDIR)                                                                                                                                                                                                                   | `1Gi`                                                                                                                                                           |
-| `pipelines.tmpdir.type`                  | Disk type to attach to the [standard `TMPDIR` directory](https://en.wikipedia.org/wiki/TMPDIR); see your cloud provider for types ([Azure](https://learn.microsoft.com/en-us/azure/aks/concepts-storage#storage-classes), [AWS](https://docs.aws.amazon.com/eks/latest/userguide/storage-classes.html)) | `managed-csi` (Azure compatible)                                                                                                                                |
+| `pipelines.tmpdir.type`                  | StorageClass of the volume attached to the [standard `TMPDIR` directory](https://en.wikipedia.org/wiki/TMPDIR); empty uses the cluster default StorageClass, which must provision [generic ephemeral volumes](https://kubernetes.io/docs/concepts/storage/ephemeral-volumes/) ([see storage](#storage)) | _None_ (cluster default)                                                                                                                                        |
 | `pipelines.tmpdir.volumeEnabled`         | Enabled by default, can be disabled if your CSI driver doesn't support ephemeral storage ([exhaustive list](https://kubernetes-csi.github.io/docs/drivers.html)); if disabled, it is advised to allow >= 10Gi of ephemeral storage usage (see `resources`)                                              | `true`                                                                                                                                                          |
 | `podSecurityContext`                     | Security rules applied to the Pod ([more details](https://kubernetes.io/docs/concepts/security/pod-security-standards))                                                                                                                                                                                 | `{}`                                                                                                                                                            |
 | `replicaCount`                           | Default fixed amount of agents deployed; those are not auto-scaled                                                                                                                                                                                                                                      | `3`                                                                                                                                                             |
@@ -67,3 +67,46 @@ Helm is a package manager for Kubernetes, allowing to easily deploy applications
 | `serviceAccount.name`                    | ServiceAccount name                                                                                                                                                                                                                                                                                     | _Release name_                                                                                                                                                  |
 | `sidecarContainers`                      | Containers to run alongside the agent container                                                                                                                                                                                                                                                         | `[]`                                                                                                                                                            |
 | `tolerations`                            | Toleration labels for pod assignment                                                                                                                                                                                                                                                                    | `[]`                                                                                                                                                            |
+
+#### Storage
+
+By default, the work directory (`pipelines.cache`) and the system temporary directory (`pipelines.tmpdir`) are [generic ephemeral volumes](https://kubernetes.io/docs/concepts/storage/ephemeral-volumes/#generic-ephemeral-volumes): a `PersistentVolumeClaim` is created with each Pod, and deleted with it. Any StorageClass with dynamic provisioning works, the cluster default one is used when `type` is empty.
+
+Prefer a StorageClass with `volumeBindingMode: WaitForFirstConsumer`, so the volume is created in the zone where the Pod is scheduled.
+
+Azure Kubernetes Service, the default StorageClass is a Standard SSD, a Premium SSD can be selected for performance:
+
+```yaml
+# values.yaml (extract)
+pipelines:
+  cache:
+    type: managed-csi-premium
+  tmpdir:
+    type: managed-csi-premium
+```
+
+Amazon EKS, with the [EBS CSI driver](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html). Recent EKS clusters do not have a default StorageClass, create one for `gp3`:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+parameters:
+  type: gp3
+  encrypted: "true"
+```
+
+```yaml
+# values.yaml (extract)
+pipelines:
+  cache:
+    type: gp3
+  tmpdir:
+    type: gp3
+```
+
+Each agent attaches two block volumes: keep the number of agents per node under the attachment limit of the instance type, and expect a few seconds of provisioning at Pod start. If your storage does not support generic ephemeral volumes, set `volumeEnabled: false` to use an `emptyDir` instead, and raise `resources.limits.ephemeral-storage` accordingly.

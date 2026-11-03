@@ -74,6 +74,12 @@ Chart Hash Verified: sha256:1c23e22cffc132ce12489480d139b59e97b3cb49ff1599a4ae11
 Verified OK
 ```
 
+## Agent credentials
+
+The PAT (`AZP_TOKEN`) or the service principal client secret (`AZP_CLIENT_SECRET`) is only used to register and remove the agent. It is removed from the environment before the agent starts, so pipeline jobs do not inherit it and cannot print it with `printenv`.
+
+Jobs run as root in the agent container by default: a malicious job can still read the original environment of the container (`/proc/1/environ`) or a mounted secret file. Only run trusted pipelines on a pool, scope the PAT to _Agent Pools (Read & manage)_, and prefer a service principal or short-lived tokens.
+
 ## Reliability notes
 
 Systems are built every days. Each image is accompanied by a [SBOM (Software Bill of Materials)](https://en.wikipedia.org/wiki/Software_supply_chain) which allows to verify that the installed packages are those expected. This speed has the advantage of minimizing exposure to security flaws, which will then be corrected on the build environments in 24 hours.

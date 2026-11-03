@@ -17,11 +17,16 @@ set -e
 #
 # Environment variables:
 # - AZP_AGENT_NAME: Agent name (default: hostname)
+# - AZP_AUTH: Authentication used to register the agent, "PAT" or "SP" for a Microsoft Entra service principal (default: PAT)
+# - AZP_CLIENT_ID: Service principal client ID (AZP_AUTH=SP)
+# - AZP_CLIENT_SECRET: Service principal client secret (AZP_AUTH=SP)
+# - AZP_CLIENT_SECRET_FILE: File containing the service principal client secret, used when AZP_CLIENT_SECRET is not set (default: empty)
 # - AZP_CUSTOM_CERT_PEM: Custom SSL certificates directory (default: empty)
 # - AZP_IDLE_TIMEOUT: Seconds to wait for a job before removing an idle agent (default: 60) - 0 disables the idle timeout
 # - AZP_POOL: Agent pool name
 # - AZP_TEMPLATE_JOB: Template job flag (default: 0) - when set to 1, creates template container
-# - AZP_TOKEN: Personal access token
+# - AZP_TENANT_ID: Service principal tenant ID (AZP_AUTH=SP)
+# - AZP_TOKEN: Personal access token (AZP_AUTH=PAT)
 # - AZP_TOKEN_FILE: File containing the personal access token, used when AZP_TOKEN is not set (default: empty)
 # - AZP_URL: Server URL
 # - AZP_URL_FILE: File containing the server URL, used when AZP_URL is not set (default: empty)
@@ -69,16 +74,49 @@ read_from_file() {
 
 read_from_file AZP_URL
 read_from_file AZP_TOKEN
+read_from_file AZP_CLIENT_SECRET
 
 if [ -z "$AZP_URL" ]; then
   raise_error "Missing AZP_URL environment variable"
   exit 1
 fi
 
-if [ -z "$AZP_TOKEN" ]; then
-  raise_error "Missing AZP_TOKEN environment variable"
-  exit 1
-fi
+AZP_AUTH="${AZP_AUTH:-PAT}"
+client_secret=""
+case "${AZP_AUTH^^}" in
+  PAT)
+    if [ -z "$AZP_TOKEN" ]; then
+      raise_error "Missing AZP_TOKEN environment variable"
+      exit 1
+    fi
+    auth_args=(--auth PAT --token "$AZP_TOKEN")
+    ;;
+  SP)
+    for name in AZP_CLIENT_ID AZP_CLIENT_SECRET AZP_TENANT_ID; do
+      if [ -z "${!name}" ]; then
+        raise_error "Missing $name environment variable, required with AZP_AUTH=SP"
+        exit 1
+      fi
+    done
+    # The client secret is passed through the environment, not the command line, and only to the configuration commands
+    auth_args=(--auth SP --clientid "$AZP_CLIENT_ID" --tenantid "$AZP_TENANT_ID")
+    client_secret="$AZP_CLIENT_SECRET"
+    unset AZP_CLIENT_SECRET
+    ;;
+  *)
+    raise_error "Unsupported AZP_AUTH value (${AZP_AUTH}), use PAT or SP"
+    exit 1
+    ;;
+esac
+
+# Run the agent configuration script with the authentication arguments
+config_agent() {
+  if [ -n "$client_secret" ]; then
+    VSTS_AGENT_INPUT_CLIENTSECRET="$client_secret" bash config.sh "$@" "${auth_args[@]}"
+  else
+    bash config.sh "$@" "${auth_args[@]}"
+  fi
+}
 
 if [ -z "$AZP_POOL" ]; then
   raise_error "Missing AZP_POOL environment variable"
@@ -114,9 +152,7 @@ unregister() {
   # If the agent has some running jobs, the configuration removal process will fail ; so, give it some time to finish the job
   while true; do
     # If the agent is removed successfully, exit the loop
-    bash config.sh remove \
-        --auth PAT \
-        --token "$AZP_TOKEN" \
+    config_agent remove \
         --unattended \
       && break
 
@@ -174,13 +210,11 @@ write_header "Configuring agent"
 
 cd $(dirname "$0")
 
-bash config.sh \
+config_agent \
   --acceptTeeEula \
   --agent "$AZP_AGENT_NAME" \
-  --auth PAT \
   --pool "$AZP_POOL" \
   --replace \
-  --token "$AZP_TOKEN" \
   --unattended \
   --url "$AZP_URL" \
   --work "$AZP_WORK" &

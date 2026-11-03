@@ -6,6 +6,7 @@ metadata:
   labels:
     {{- include "blue-agent.labels" . | nindent 4 }}
 spec:
+  {{- $kedaAuth := include "blue-agent.kedaAuthType" . }}
   {{- if and .Values.secret.create .Values.secret.azureKeyVault.enabled (.Capabilities.APIVersions.Has "secrets-store.csi.x-k8s.io/v1") }}
   # Azure Key Vault secret authentication provider, for KEDA
   azureKeyVault:
@@ -24,9 +25,29 @@ spec:
     - parameter: organizationURL
       name: {{ include "blue-agent.secretName" . }}
       key: organizationURL
+    {{- if eq $kedaAuth "pat" }}
     - parameter: personalAccessToken
       name: {{ include "blue-agent.secretName" . }}
       key: personalAccessToken
+    {{- end }}
+  {{- if eq $kedaAuth "servicePrincipal" }}
+  # Microsoft Entra service principal, requires KEDA >= 2.21
+  azureServicePrincipal:
+    tenantId: {{ .Values.pipelines.auth.tenantId | required "A value for .Values.pipelines.auth.tenantId is required" | quote }}
+    clientId: {{ .Values.pipelines.auth.clientId | required "A value for .Values.pipelines.auth.clientId is required" | quote }}
+    clientSecret:
+      valueFrom:
+        secretKeyRef:
+          name: {{ include "blue-agent.secretName" . }}
+          key: clientSecret
+  {{- else if eq $kedaAuth "workloadIdentity" }}
+  # Microsoft Entra Workload ID of the KEDA operator
+  podIdentity:
+    provider: azure-workload
+    {{- with .Values.autoscaling.auth.identityId }}
+    identityId: {{ . | quote }}
+    {{- end }}
+  {{- end }}
   {{- end }}
 ---
 apiVersion: keda.sh/v1alpha1

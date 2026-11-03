@@ -57,6 +57,12 @@ autoscaling:
   # Additional KEDA triggers for the ScaledJob, templated
   # See: https://keda.sh/docs/latest/scalers/
   extraTriggers: []
+  # Authentication used by KEDA to read the queue of the pool
+  auth:
+    # Empty to follow "pipelines.auth.type", or "pat" (personalAccessToken), "servicePrincipal" (pipelines.auth service principal, KEDA >= 2.21) or "workloadIdentity" (identity of the KEDA operator)
+    type: ""
+    # Client ID of the identity used by the KEDA operator with "workloadIdentity", empty for the KEDA default
+    identityId: null
 
 # Pipeline configuration
 pipelines:
@@ -66,6 +72,16 @@ pipelines:
   organizationURL: null
   # Personal access token for authentication
   personalAccessToken: null
+  # Authentication used by the agent to register itself in the pool
+  auth:
+    # "pat" (personalAccessToken) or "servicePrincipal" (Microsoft Entra service principal with a client secret, agent >= 3.227.1)
+    type: pat
+    # Service principal client (application) ID
+    clientId: null
+    # Service principal tenant ID
+    tenantId: null
+    # Service principal client secret, stored in the Secret with the key "clientSecret"
+    clientSecret: null
   # Name of the agent pool
   poolName: null
   # Timeout in seconds, default is 1 hour

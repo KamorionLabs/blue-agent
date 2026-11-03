@@ -69,9 +69,21 @@ spec:
   # Do not delete executed jobs during upgrade
   rollout:
     strategy: gradual
-  # Azure Pipelines scaler returns the number of jobs in the queue, incl the current job
+  {{- $strategy := .Values.autoscaling.scalingStrategy | required "A value for .Values.autoscaling.scalingStrategy is required" }}
+  {{- $hasCron := gt (len .Values.autoscaling.schedules) 0 }}
+  {{- range .Values.autoscaling.extraTriggers }}
+  {{- if eq (toString .type) "cron" }}
+  {{- $hasCron = true }}
+  {{- end }}
+  {{- end }}
+  {{- if and $hasCron (not (and (eq $strategy "default") (eq (toString .Values.autoscaling.scaleOnInFlight) "true"))) }}
+  {{- fail "autoscaling.schedules and cron extraTriggers require autoscaling.scalingStrategy \"default\" and autoscaling.scaleOnInFlight true (KEDA >= 2.21): with \"accurate\", KEDA would create new agents at every polling interval while warm agents are idle" }}
+  {{- end }}
+  # See: https://keda.sh/docs/latest/reference/scaledjob-spec/#scalingstrategy
+  # "accurate" expects the queue length to exclude the jobs already assigned to an agent (scaleOnInFlight false), "default" expects it to include them (scaleOnInFlight true)
   scalingStrategy:
-    strategy: accurate
+    strategy: {{ $strategy | quote }}
+    multipleScalersCalculation: {{ .Values.autoscaling.multipleScalersCalculation | required "A value for .Values.autoscaling.multipleScalersCalculation is required" | quote }}
   # Rules to scale up/down
   pollingInterval: {{ .Values.autoscaling.pollingInterval | int | required "A value for .Values.autoscaling.pollingInterval is required" }}
   triggers:
@@ -79,6 +91,23 @@ spec:
       metadata:
         poolName: {{ .Values.pipelines.poolName | quote | required "A value for .Values.pipelines.poolName is required" }}
         parent: {{ include "blue-agent.fullname" . }}-template
+        {{- if not (kindIs "invalid" .Values.autoscaling.scaleOnInFlight) }}
+        # Count the jobs already assigned to an agent (KEDA >= 2.21, ignored by older versions)
+        scaleOnInFlight: {{ .Values.autoscaling.scaleOnInFlight | toString | quote }}
+        {{- end }}
       authenticationRef:
         name: {{ include "blue-agent.fullname" . }}
+    {{- range .Values.autoscaling.schedules }}
+    # Warm agents on a schedule
+    - type: cron
+      metadata:
+        timezone: {{ .timezone | default "Etc/UTC" | quote }}
+        start: {{ .start | required "A value for .Values.autoscaling.schedules[].start is required" | quote }}
+        end: {{ .end | required "A value for .Values.autoscaling.schedules[].end is required" | quote }}
+        desiredReplicas: {{ .desiredReplicas | required "A value for .Values.autoscaling.schedules[].desiredReplicas is required" | int | toString | quote }}
+    {{- end }}
+    {{- with .Values.autoscaling.extraTriggers }}
+    # Custom triggers
+    {{- tpl (toYaml .) $ | nindent 4 }}
+    {{- end }}
 {{- end }}

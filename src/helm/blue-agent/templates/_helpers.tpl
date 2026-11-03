@@ -208,21 +208,40 @@ containers:
       # Agent name is dynamically set from arguments
       - name: AZP_AGENT_NAME
         {{- toYaml .Args.azpAgentName | nindent 8 }}
+      {{- if and .Values.secret.create .Values.secret.azureKeyVault.enabled (.Capabilities.APIVersions.Has "secrets-store.csi.x-k8s.io/v1") }}
+      # Credentials are read from the files mounted by the Secrets Store CSI Driver
+      # The synchronized Kubernetes Secret only exists while a Pod mounts the volume, so it cannot be referenced here: KEDA resolves the env of the job template to scale from zero
+      - name: AZP_URL_FILE
+        {{- if .Values.image.isWindows }}
+        value: C:\\secrets-store\\organization-url
+        {{- else }}
+        value: /mnt/secrets-store/organization-url
+        {{- end }}
+      - name: AZP_TOKEN_FILE
+        {{- if .Values.image.isWindows }}
+        value: C:\\secrets-store\\personal-access-token
+        {{- else }}
+        value: /mnt/secrets-store/personal-access-token
+        {{- end }}
+      {{- else }}
       # Azure DevOps org URL
       - name: AZP_URL
         valueFrom:
           secretKeyRef:
             name: {{ include "blue-agent.secretName" . }}
             key: organizationURL
+      {{- end }}
       # Azure DevOps org pool name
       - name: AZP_POOL
         value: {{ .Values.pipelines.poolName | quote | required "A value for .Values.pipelines.poolName is required" }}
+      {{- if not (and .Values.secret.create .Values.secret.azureKeyVault.enabled (.Capabilities.APIVersions.Has "secrets-store.csi.x-k8s.io/v1")) }}
       # Azure DevOps PAT allowing the agent to register itself to the pool
       - name: AZP_TOKEN
         valueFrom:
           secretKeyRef:
             name: {{ include "blue-agent.secretName" . }}
             key: personalAccessToken
+      {{- end }}
       - name: AZP_TEMPLATE_JOB
         value: {{ .Args.isTemplateJob | quote }}
       {{- if hasKey .Args "idleTimeout" }}

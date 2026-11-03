@@ -22,7 +22,9 @@ set -e
 # - AZP_POOL: Agent pool name
 # - AZP_TEMPLATE_JOB: Template job flag (default: 0) - when set to 1, creates template container
 # - AZP_TOKEN: Personal access token
+# - AZP_TOKEN_FILE: File containing the personal access token, used when AZP_TOKEN is not set (default: empty)
 # - AZP_URL: Server URL
+# - AZP_URL_FILE: File containing the server URL, used when AZP_URL is not set (default: empty)
 # - AZP_WORK: Work directory
 
 ##
@@ -50,6 +52,23 @@ raise_error() {
 ##
 # Argument parsing
 ##
+
+# Read a variable from the file named by "<name>_FILE" when the variable itself is empty
+# Used with files mounted by the Secrets Store CSI Driver, which do not depend on a synchronized Kubernetes Secret
+read_from_file() {
+  local name=$1
+  local file_name="${1}_FILE"
+  if [ -z "${!name}" ] && [ -n "${!file_name}" ]; then
+    if [ ! -r "${!file_name}" ]; then
+      raise_error "File ${!file_name} from ${file_name} environment variable is not readable"
+      exit 1
+    fi
+    printf -v "$name" '%s' "$(tr -d '\r\n' < "${!file_name}")"
+  fi
+}
+
+read_from_file AZP_URL
+read_from_file AZP_TOKEN
 
 if [ -z "$AZP_URL" ]; then
   raise_error "Missing AZP_URL environment variable"

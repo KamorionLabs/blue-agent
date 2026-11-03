@@ -19,7 +19,9 @@
 # - AZP_POOL: Agent pool name
 # - AZP_TEMPLATE_JOB: Template job flag (default: 0) - when set to 1, creates template container
 # - AZP_TOKEN: Personal access token
+# - AZP_TOKEN_FILE: File containing the personal access token, used when AZP_TOKEN is not set (default: empty)
 # - AZP_URL: Server URL
+# - AZP_URL_FILE: File containing the server URL, used when AZP_URL is not set (default: empty)
 # - AZP_WORK: Work directory
 
 ##
@@ -41,6 +43,19 @@ function Raise-Error() {
 ##
 # Argument parsing
 ##
+
+# Read a variable from the file named by "<name>_FILE" when the variable itself is empty
+# Used with files mounted by the Secrets Store CSI Driver, which do not depend on a synchronized Kubernetes Secret
+foreach ($name in @("AZP_URL", "AZP_TOKEN")) {
+  $value = [Environment]::GetEnvironmentVariable($name)
+  $file = [Environment]::GetEnvironmentVariable("${name}_FILE")
+  if (($null -eq $value -or $value -eq "") -and ($null -ne $file -and $file -ne "")) {
+    if (!(Test-Path $file)) {
+      Raise-Error "File $file from ${name}_FILE environment variable is not readable"
+    }
+    [Environment]::SetEnvironmentVariable($name, (Get-Content -Raw $file).Trim())
+  }
+}
 
 if ($null -eq $Env:AZP_URL -or $Env:AZP_URL -eq "") {
   Raise-Error "Missing AZP_URL environment variable"

@@ -36,6 +36,27 @@ autoscaling:
   # A KEDA job can be created for a queued pipeline job that another agent picks up first, this delay cleans it up
   # Raise it to reduce agent churn when keeping warm agents (see "minReplicas")
   idleTimeout: 60
+  # KEDA ScaledJob scaling strategy: "accurate" (with scaleOnInFlight false) or "default" (with scaleOnInFlight true)
+  # See: https://keda.sh/docs/latest/reference/scaledjob-spec/#scalingstrategy
+  scalingStrategy: accurate
+  # Count the pipeline jobs already assigned to an agent in the queue length (KEDA >= 2.21, ignored by older versions), null to omit it
+  scaleOnInFlight: false
+  # How KEDA combines the values of several triggers: max, min, avg or sum
+  multipleScalersCalculation: max
+  # Warm agents on a schedule, rendered as KEDA cron triggers combined with the Azure Pipelines trigger
+  # Requires scalingStrategy "default" and scaleOnInFlight true (KEDA >= 2.21)
+  #
+  # Example, 2 warm agents on weekdays from 8:00 to 19:00, scale to zero at night and on weekends:
+  #
+  # schedules:
+  #   - timezone: Europe/Paris
+  #     start: "0 8 * * 1-5"
+  #     end: "0 19 * * 1-5"
+  #     desiredReplicas: 2
+  schedules: []
+  # Additional KEDA triggers for the ScaledJob, templated
+  # See: https://keda.sh/docs/latest/scalers/
+  extraTriggers: []
 
 # Pipeline configuration
 pipelines:

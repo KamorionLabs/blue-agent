@@ -36,38 +36,42 @@ env:
   # https://github.com/sigstore/cosign/releases
   COSIGN_VERSION: 3.1.4
   # https://github.com/microsoft/azure-pipelines-agent/releases
-  AZP_AGENT_VERSION: 5.279.0
+  AZP_AGENT_VERSION: 5.281.1
   # https://github.com/PowerShell/PowerShell/releases
-  # Note: v7.4.x is the LTS line supported until 2026-11-10; v7.6.x is the next LTS (built on .NET 10), as of 2026-09-14
-  POWERSHELL_VERSION: 7.4.20
+  # Note: Current LTS is the v7.6.x (v7.4.x is EOL on 2026-11-10), as of 2026-11-03
+  POWERSHELL_VERSION: 7.6.9
   # https://github.com/krallin/tini/releases
   TINI_VERSION: 0.19.0
   # https://github.com/mikefarah/yq/releases
-  YQ_VERSION: 4.53.6
+  YQ_VERSION: 4.54.1
   # https://go.dev/dl
-  GO_VERSION: 1.27.1
+  GO_VERSION: 1.27.3
   # https://github.com/rootless-containers/rootlesskit/releases
-  ROOTLESSKIT_VERSION: 3.1.0
+  ROOTLESSKIT_VERSION: 3.3.0
   # https://github.com/moby/buildkit/releases
-  BUILDKIT_VERSION: 0.33.0
+  BUILDKIT_VERSION: 0.34.2
   # https://github.com/Azure/azure-cli/releases
-  AZURE_CLI_VERSION: 2.90.0
+  AZURE_CLI_VERSION: 2.92.0
   # https://github.com/stedolan/jq/releases
   JQ_WIN_VERSION: 1.8.2
   # https://github.com/aws/aws-cli/tags
-  AWS_CLI_VERSION: 2.36.44
+  AWS_CLI_VERSION: 2.39.3
   # https://console.cloud.google.com/artifacts/docker/google.com:cloudsdktool/us/gcr.io/google-cloud-cli
   # Note: To get thhe version number, spot the version tag on the latest pushed container
-  GCLOUD_CLI_VERSION: 584.0.0
+  GCLOUD_CLI_VERSION: 592.0.0
   # https://github.com/git-for-windows/git/releases
-  GIT_WIN_VERSION: 2.55.0
+  # Note: Full release tag, including the ".windows.N" revision
+  GIT_WIN_VERSION: 2.56.0.windows.4
   # https://github.com/facebook/zstd/releases
   ZSTD_WIN_VERSION: 1.5.7
   # https://www.python.org/downloads
   PYTHON_312_VERSION_MAJOR_MINOR: 3.12
-  PYTHON_312_VERSION_PATCH: 14
+  PYTHON_312_VERSION_PATCH: 16
   PYTHON_313_VERSION_MAJOR_MINOR: 3.13
-  PYTHON_313_VERSION_PATCH: 15
+  PYTHON_313_VERSION_PATCH: 18
+  # Note: Used by Windows images, as Python 3.13 no longer ships binary installers
+  PYTHON_314_VERSION_MAJOR_MINOR: 3.14
+  PYTHON_314_VERSION_PATCH: 10
   # https://nodejs.org/en/download/releases
   NODE_VERSION: 24.22.2
   # https://github.com/helm/helm/releases
@@ -887,6 +891,8 @@ jobs:
             "--build-arg", "PYTHON_312_VERSION_PATCH=${{ env.PYTHON_312_VERSION_PATCH }}",
             "--build-arg", "PYTHON_313_VERSION_MAJOR_MINOR=${{ env.PYTHON_313_VERSION_MAJOR_MINOR }}",
             "--build-arg", "PYTHON_313_VERSION_PATCH=${{ env.PYTHON_313_VERSION_PATCH }}",
+            "--build-arg", "PYTHON_314_VERSION_MAJOR_MINOR=${{ env.PYTHON_314_VERSION_MAJOR_MINOR }}",
+            "--build-arg", "PYTHON_314_VERSION_PATCH=${{ env.PYTHON_314_VERSION_PATCH }}",
             "--build-arg", "VS_BUILDTOOLS_VERSION=${{ env.VS_BUILDTOOLS_WIN_VERSION }}",
             "--build-arg", "YQ_VERSION=${{ env.YQ_VERSION }}",
             "--build-arg", "ZSTD_VERSION=${{ env.ZSTD_WIN_VERSION }}",

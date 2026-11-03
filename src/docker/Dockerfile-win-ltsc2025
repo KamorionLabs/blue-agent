@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # check=skip=UndefinedVar,WorkdirRelativePath
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0-windowsservercore-ltsc2025@sha256:1353ab216c41f01247d52718c7c8371a7a589f8780abe8841d0e8b15c310d0b1
+FROM mcr.microsoft.com/dotnet/sdk:8.0-windowsservercore-ltsc2025@sha256:ac903cf6c6418db5955a9427c10db7622aa7bc09fde450f896c5086d8c89a869
 
 # Configure local user
 USER ContainerAdministrator
@@ -29,7 +29,9 @@ SHELL ["pwsh", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference
 # Install Git, then verify installation
 ARG GIT_VERSION
 ENV GIT_VERSION=${GIT_VERSION}
-RUN curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 "https://github.com/git-for-windows/git/releases/download/v${Env:GIT_VERSION}.windows.1/Git-${Env:GIT_VERSION}-64-bit.exe" -o git.exe \
+# Note: GIT_VERSION is the full Git for Windows tag (e.g. "2.56.0.windows.4"), installer is named "Git-2.56.0.4-64-bit.exe" (or "Git-2.56.0-64-bit.exe" for ".windows.1")
+RUN $gitFileVersion = $Env:GIT_VERSION -replace '\.windows\.1$', '' -replace '\.windows\.', '.'; \
+    curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 "https://github.com/git-for-windows/git/releases/download/v${Env:GIT_VERSION}/Git-${gitFileVersion}-64-bit.exe" -o git.exe \
     && Start-Process git.exe -Wait -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOCANCEL /SP-' \
     && Remove-Item git.exe
 RUN git --version
@@ -45,9 +47,10 @@ RUN jq --version
 
 # Install Python, then verify installation
 # TODO: Clean up "__pycache__" folders on disk
-ARG PYTHON_313_VERSION_MAJOR_MINOR
-ARG PYTHON_313_VERSION_PATCH
-ENV PYTHON_VERSION=${PYTHON_313_VERSION_MAJOR_MINOR}.${PYTHON_313_VERSION_PATCH}
+# Note: Python 3.13 is source-only since 3.13.18, Windows uses 3.14 which still ships binary installers
+ARG PYTHON_314_VERSION_MAJOR_MINOR
+ARG PYTHON_314_VERSION_PATCH
+ENV PYTHON_VERSION=${PYTHON_314_VERSION_MAJOR_MINOR}.${PYTHON_314_VERSION_PATCH}
 RUN curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 "https://python.org/ftp/python/${Env:PYTHON_VERSION}/python-${Env:PYTHON_VERSION}-amd64.exe" -o python.exe \
     && Start-Process python.exe -Wait -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_test=0' \
     && Remove-Item python.exe

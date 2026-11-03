@@ -1,17 +1,39 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: ""
-    target-branch: develop
+    directory: /
     schedule:
       interval: weekly
+    # Let new releases settle before proposing them (supply-chain safety)
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
   - package-ecosystem: docker
-    directory: src/docker
-    target-branch: develop
+    directory: /src/docker
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns:
+          - "*"
+  - package-ecosystem: helm
+    directory: /src/helm/blue-agent
+    schedule:
+      interval: weekly
+    groups:
+      helm:
+        patterns:
+          - "*"
   - package-ecosystem: gitsubmodule
-    directory: cicd/version
-    target-branch: develop
+    directory: /
     schedule:
       interval: weekly
+    groups:
+      gitsubmodule:
+        patterns:
+          - "*"

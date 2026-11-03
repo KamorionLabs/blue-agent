@@ -82,16 +82,17 @@ pipelines:
   cache:
     # Size of the cache, default is 10Gi
     size: 10Gi
-    # Type of the cache volume
-    type: managed-csi
+    # StorageClass of the cache volume, the cluster default StorageClass is used if empty
+    # Examples: "managed-csi" or "managed-csi-premium" on AKS, "gp3" on EKS (StorageClass to create with the EBS CSI driver)
+    type: null
     # Enables the cache volume, default is true
     volumeEnabled: true
   # Temporary directory configuration
   tmpdir:
     # Size of the temp directory, default is 1Gi
     size: 1Gi
-    # Type of the temp directory volume
-    type: managed-csi
+    # StorageClass of the temp directory volume, the cluster default StorageClass is used if empty
+    type: null
     # Enables the temp directory volume, default is true
     volumeEnabled: true
 

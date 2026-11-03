@@ -312,7 +312,9 @@ volumes:
       volumeClaimTemplate:
         spec:
           accessModes: [ "ReadWriteOnce" ]
-          storageClassName: {{ .Values.pipelines.cache.type | required "A value for .Values.pipelines.cache.type is required" }}
+          {{- with .Values.pipelines.cache.type }}
+          storageClassName: {{ . | quote }}
+          {{- end }}
           resources:
             requests:
               storage: {{ .Values.pipelines.cache.size | required "A value for .Values.pipelines.cache.size is required" }}
@@ -330,7 +332,9 @@ volumes:
       volumeClaimTemplate:
         spec:
           accessModes: [ "ReadWriteOnce" ]
-          storageClassName: {{ .Values.pipelines.tmpdir.type | required "A value for .Values.pipelines.tmpdir.type is required" }}
+          {{- with .Values.pipelines.tmpdir.type }}
+          storageClassName: {{ . | quote }}
+          {{- end }}
           resources:
             requests:
               storage: {{ .Values.pipelines.tmpdir.size | required "A value for .Values.pipelines.tmpdir.size is required" }}

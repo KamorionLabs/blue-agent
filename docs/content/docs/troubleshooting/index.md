@@ -43,6 +43,14 @@ The idle timeout is meant for auto-scaled agents only, where a pod is started fo
 
 If you run the container outside of the Helm chart, set the environment variable `AZP_IDLE_TIMEOUT=0` for long-lived agents. Any other value is the number of seconds to wait for a job before the agent is removed (default `60`).
 
+## Pods are stuck with `FailedMount` or `unbound immediate PersistentVolumeClaims`
+
+The work directory and the system temporary directory are [generic ephemeral volumes](https://kubernetes.io/docs/concepts/storage/ephemeral-volumes/#generic-ephemeral-volumes), created from `pipelines.cache.type` and `pipelines.tmpdir.type` (the cluster default StorageClass when empty).
+
+- `pod has unbound immediate PersistentVolumeClaims`: the StorageClass does not exist, or there is no default StorageClass. Check with `kubectl get storageclass` and set `pipelines.cache.type` and `pipelines.tmpdir.type`.
+- `no Pending workload pods for volume ... to be mounted`: this is a [Longhorn issue](https://github.com/longhorn/longhorn/issues/8072) with ephemeral volumes, fixed in Longhorn 1.6.1.
+- Any other storage that does not support ephemeral volumes: set `pipelines.cache.volumeEnabled` and `pipelines.tmpdir.volumeEnabled` to `false` to use an `emptyDir`, and raise `resources.limits.ephemeral-storage`.
+
 ## Pods are evicted by Kubernetes with the message `Pod ephemeral local storage usage exceeds the total limit of containers`
 
 This error is due to the fact that the default ephemeral storage limit is set to a lower value than the one used by the pipeline. You can fix it by setting the value to more than default value in `resources.limits.ephemeral-storage`.

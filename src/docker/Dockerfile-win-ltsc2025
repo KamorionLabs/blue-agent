@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # check=skip=UndefinedVar,WorkdirRelativePath
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0-windowsservercore-ltsc2025@sha256:ac903cf6c6418db5955a9427c10db7622aa7bc09fde450f896c5086d8c89a869
+FROM mcr.microsoft.com/dotnet/sdk:10.0-windowsservercore-ltsc2025@sha256:41bdfc07caa768d3ae4d90860de4871f800ad086c23c9ebd17dec86b951d9d44
 
 # Configure local user
 USER ContainerAdministrator

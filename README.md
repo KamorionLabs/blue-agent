@@ -1,26 +1,17 @@
-> [!IMPORTANT]
-> Project name is now Blue Agent! Was previously known as Azure Pipelines Agent.
+> [!NOTE]
+> This is the [KamorionLabs](https://github.com/KamorionLabs) fork of [clemlesne/blue-agent](https://github.com/clemlesne/blue-agent), see the [fork notice](#fork-notice).
 
 # Blue Agent
 
 <!-- Use absolute path for images in README.md, so that they are displayed on ArtifactHub.io, Lens, OpenLens, etc. -->
-<img src="https://raw.githubusercontent.com/clemlesne/blue-agent/main/docs/static/favicon.svg" width="100">
+<img src="https://raw.githubusercontent.com/KamorionLabs/blue-agent/main/docs/static/favicon.svg" width="100">
 
-[Blue Agent](https://github.com/clemlesne/blue-agent) is self-hosted agent in Kubernetes, cheap to run, secure, auto-scaled and easy to deploy.
+[Blue Agent](https://github.com/KamorionLabs/blue-agent) is self-hosted agent in Kubernetes, cheap to run, secure, auto-scaled and easy to deploy.
 
 <!-- github.com badges -->
 
-[![Last release date](https://img.shields.io/github/release-date/clemlesne/blue-agent)](https://github.com/clemlesne/blue-agent/releases)
-[![Project license](https://img.shields.io/github/license/clemlesne/blue-agent)](https://github.com/clemlesne/blue-agent/blob/main/LICENSE)
-
-<!-- artifacthub.io badges -->
-
-[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/blue-agent)](https://artifacthub.io/packages/search?repo=blue-agent)
-[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/blue-agent-container)](https://artifacthub.io/packages/search?repo=blue-agent-container)
-
-## Celebrating the community
-
-We broke through 2,000,000 container pulls in August! 🎉
+[![Last release date](https://img.shields.io/github/release-date/KamorionLabs/blue-agent)](https://github.com/KamorionLabs/blue-agent/releases)
+[![Project license](https://img.shields.io/github/license/KamorionLabs/blue-agent)](https://github.com/KamorionLabs/blue-agent/blob/main/LICENSE)
 
 ## Features
 
@@ -35,17 +26,31 @@ We broke through 2,000,000 container pulls in August! 🎉
 
 - 💰 Cheap to run (dynamic provisioning of agents, can scale from 0 to 100+ in few seconds with [KEDA](https://keda.sh)).
 - 📦 [SBOM (Software Bill of Materials)](https://en.wikipedia.org/wiki/Software_supply_chain) is packaged with each container image.
-- 🔄 System updates are applied every day.
-- 🔒 Build authenticity can be cryptographically verified with [Cosign](https://github.com/sigstore/cosign) and GPG.
+- 🔄 Released images are rebuilt every month to pick up base image security fixes.
+- 🔒 Build authenticity can be cryptographically verified with [Cosign](https://github.com/sigstore/cosign) keyless signatures ([Sigstore](https://www.sigstore.dev)).
 - 🪶 Slim container images by design.
 
 ## How to deploy
 
-[Deployment is available](https://clemlesne.github.io/blue-agent/docs/getting-started) using Helm on a Kubernetes cluster or Bicep on Azure Container Apps.
+[Deployment is available](https://kamorionlabs.github.io/blue-agent/docs/getting-started) using Helm on a Kubernetes cluster or Bicep on Azure Container Apps.
+
+```bash
+helm upgrade --install agent oci://ghcr.io/kamorionlabs/charts/blue-agent
+```
 
 ## Documentation
 
-Documentation is available at [clemlesne.github.io/blue-agent](https://clemlesne.github.io/blue-agent/).
+Documentation is available at [kamorionlabs.github.io/blue-agent](https://kamorionlabs.github.io/blue-agent/).
+
+## Fork notice
+
+Blue Agent was created by [Clémence Lesné](https://github.com/clemlesne) as [clemlesne/blue-agent](https://github.com/clemlesne/blue-agent) (itself derived from [emberstack/docker-azure-pipelines-agent](https://github.com/emberstack/docker-azure-pipelines-agent)), under the [Apache License 2.0](./LICENSE). All credit for the project goes to its original authors, see [`NOTICE`](./NOTICE) and [`AUTHORS.md`](./AUTHORS.md).
+
+The original project is not maintained anymore since mid-2025. This fork is maintained by [KamorionLabs](https://github.com/KamorionLabs) and is not affiliated with or endorsed by the original authors. Differences with the original project:
+
+- Container images are published to `ghcr.io/kamorionlabs/blue-agent` (same `<flavor>-<version>` tags), the Helm chart to `oci://ghcr.io/kamorionlabs/charts/blue-agent`.
+- Releases continue from `13.0.0`, versions up to `12.0.1` are the original project's releases.
+- Images and chart are signed with Cosign keyless signatures (Sigstore), the original project's Cosign and GPG keys are not used anymore.
 
 ## [Code of conduct](./CODE_OF_CONDUCT.md)
 

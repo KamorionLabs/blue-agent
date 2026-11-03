@@ -6,73 +6,77 @@ weight: 4
 
 ## Proactive detection of vulnerabilities
 
-At each build, a vulnerability scan is performed on the system. If a vulnerability that can be upgraded is detected, the build is stopped and the image is not pushed to the registry. Vulnerability is reported in [GitHub Security](https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/about-code-scanning). The maintainers are alterted and have access to reports.
+At each build, a vulnerability scan is performed on the container images and on the rendered Helm chart. Findings are reported in [GitHub Security](https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/about-code-scanning), the maintainers are alerted and have access to reports.
 
-Automation is supported by [Snyk](https://snyk.io) and [Semgrep](https://semgrep.dev). Helm chart, configuration files, and containers, are scanned for vulnerabilities and misconfigurations.
+Automation is supported by [Trivy](https://trivy.dev) and [Semgrep](https://semgrep.dev). Helm chart, configuration files, and containers, are scanned for vulnerabilities and misconfigurations.
 
 Scanned systems:
 
-| `Ref`                                            | Vulnerability scans with Snyk |
-| ------------------------------------------------ | ----------------------------- |
-| `ghcr.io/clemlesne/blue-agent:alpine-main`       | ✅                            |
-| `ghcr.io/clemlesne/blue-agent:azurelinux3-main`  | ✅                            |
-| `ghcr.io/clemlesne/blue-agent:bookworm-main`     | ✅                            |
-| `ghcr.io/clemlesne/blue-agent:jammy-main`        | ✅                            |
-| `ghcr.io/clemlesne/blue-agent:noble-main`        | ✅                            |
-| `ghcr.io/clemlesne/blue-agent:ubi8-main`         | ✅                            |
-| `ghcr.io/clemlesne/blue-agent:ubi9-main`         | ✅                            |
-| `ghcr.io/clemlesne/blue-agent:win-ltsc2022-main` | ✅                            |
-| `ghcr.io/clemlesne/blue-agent:win-ltsc2025-main` | ✅                            |
+| `Ref`                                               | Vulnerability scans with Trivy |
+| --------------------------------------------------- | ------------------------------ |
+| `ghcr.io/kamorionlabs/blue-agent:alpine-main`       | ✅                             |
+| `ghcr.io/kamorionlabs/blue-agent:azurelinux3-main`  | ✅                             |
+| `ghcr.io/kamorionlabs/blue-agent:bookworm-main`     | ✅                             |
+| `ghcr.io/kamorionlabs/blue-agent:jammy-main`        | ✅                             |
+| `ghcr.io/kamorionlabs/blue-agent:noble-main`        | ✅                             |
+| `ghcr.io/kamorionlabs/blue-agent:ubi8-main`         | ✅                             |
+| `ghcr.io/kamorionlabs/blue-agent:ubi9-main`         | ✅                             |
+| `ghcr.io/kamorionlabs/blue-agent:win-ltsc2022-main` | ❌                             |
+| `ghcr.io/kamorionlabs/blue-agent:win-ltsc2025-main` | ❌                             |
 
 ## Reporting a vulnerability
 
-If you think you have found a vulnerability, please do not open an issue on GitHub. Instead, please send an email to [Clémence Lesné](mailto:clemence@lesne.pro).
+If you think you have found a vulnerability, please do not open a public issue on GitHub. Instead, please [report it privately to the maintainers](https://github.com/KamorionLabs/blue-agent/security/advisories/new).
 
 ## Chain of trust
 
-Both the containers and the Helm chart are signed:
+Both the containers and the Helm chart are signed with [Cosign](https://github.com/sigstore/cosign) keyless signatures: there is no long-lived key, each signature is bound to the GitHub Actions workflow identity of this repository and recorded in the [Sigstore](https://www.sigstore.dev) public transparency log.
+
+The signer identity to verify against is:
+
+- Issuer: `https://token.actions.githubusercontent.com`
+- Identity: `https://github.com/KamorionLabs/blue-agent/.github/workflows/pipeline.yaml@refs/tags/<tag>` for releases, `...@refs/heads/main` for development builds
 
 ### Containers
 
-Containers are signed with [Cosign](https://github.com/sigstore/cosign).
-
-Cosign public key is available in [`/cosign.pub`](cosign.pub).
-
 ```bash
 # Example of verification with Cosign
-❯ cosign verify --key cosign.pub ghcr.io/clemlesne/blue-agent:bookworm-main
-Verification for ghcr.io/clemlesne/blue-agent:bookworm-main --
-The following checks were performed on each of these signatures:
-  - The cosign claims were validated
-  - Existence of the claims in the transparency log was verified offline
-  - The signatures were verified against the specified public key
+❯ cosign verify \
+    --certificate-identity-regexp '^https://github.com/KamorionLabs/blue-agent/.github/workflows/pipeline.yaml@refs/(heads/main|tags/v.+)$' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    ghcr.io/kamorionlabs/blue-agent:bookworm-13.0.0
 ```
+
+Each image also carries a [SLSA provenance attestation](https://slsa.dev) and a SBOM, generated by BuildKit.
 
 ### Helm chart
 
-Helm chart is signed with two methods, [Cosign](https://github.com/sigstore/cosign) and [GPG](https://helm.sh/docs/topics/provenance). Both methods can be used to confirm authenticity of a build.
-
-Keys:
-
-- Cosign public key is available in [`/cosign.pub`](cosign.pub).
-- GPG public key is [available on Keybase](https://keybase.io/clemlesne/pgp_keys.asc) and in [`/pubring.gpg`](pubring.gpg).
-
-```bash
-# Example of verification with Helm native signature
-❯ helm fetch --keyring pubring.gpg --verify clemlesne-blue-agent/blue-agent --version 5.0.0
-Signed by: Clémence Lesné <clemence@lesne.pro>
-Using Key With Fingerprint: 417E701DBC66834CA752C920460D072B9C032DFD
-Chart Hash Verified: sha256:1c23e22cffc132ce12489480d139b59e97b3cb49ff1599a4ae11fb5c317c1e64
-```
+The chart is published as an OCI artifact, the OCI artifact itself is signed:
 
 ```bash
 # Example of verification with Cosign
-❯ VERSION=5.0.0
-❯ wget https://github.com/clemlesne/blue-agent/releases/download/blue-agent-${VERSION}/blue-agent-${VERSION}.tgz.bundle
-❯ helm pull clemlesne-blue-agent/blue-agent --version 5.0.0
-❯ cosign verify-blob blue-agent-${VERSION}.tgz --bundle blue-agent-${VERSION}.tgz.bundle --key cosign.pub
+❯ cosign verify \
+    --certificate-identity-regexp '^https://github.com/KamorionLabs/blue-agent/.github/workflows/pipeline.yaml@refs/tags/v.+$' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    ghcr.io/kamorionlabs/charts/blue-agent:13.0.0
+```
+
+The chart archive is also attached to each [GitHub release](https://github.com/KamorionLabs/blue-agent/releases), with its Sigstore bundle:
+
+```bash
+❯ VERSION=13.0.0
+❯ gh release download v${VERSION} --repo KamorionLabs/blue-agent
+❯ cosign verify-blob \
+    --bundle blue-agent-${VERSION}.tgz.sigstore.json \
+    --certificate-identity https://github.com/KamorionLabs/blue-agent/.github/workflows/pipeline.yaml@refs/tags/v${VERSION} \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    blue-agent-${VERSION}.tgz
 Verified OK
 ```
+
+### Releases of the original project
+
+Releases up to `12.0.1` were published by the original project, [clemlesne/blue-agent](https://github.com/clemlesne/blue-agent), and signed with its keys: Cosign public key [`/cosign.pub`](https://github.com/KamorionLabs/blue-agent/blob/main/cosign.pub) and GPG public key [`/pubring.gpg`](https://github.com/KamorionLabs/blue-agent/blob/main/pubring.gpg). These keys are kept for verifying those historical artifacts only, they are not used by this repository.
 
 ## Agent credentials
 
@@ -82,8 +86,8 @@ Jobs run as root in the agent container by default: a malicious job can still re
 
 ## Reliability notes
 
-Systems are built every days. Each image is accompanied by a [SBOM (Software Bill of Materials)](https://en.wikipedia.org/wiki/Software_supply_chain) which allows to verify that the installed packages are those expected. This speed has the advantage of minimizing exposure to security flaws, which will then be corrected on the build environments in 24 hours.
+Released images are rebuilt every month, so they pick up the security fixes of the base images. Each image is accompanied by a [SBOM (Software Bill of Materials)](https://en.wikipedia.org/wiki/Software_supply_chain) which allows to verify that the installed packages are those expected. This limits the exposure to security flaws of the base images.
 
 Nevertheless it can happen that a package provider (e.g. Debian, Canonical, Red Hat) deploys a system update that introduces a bug. This is difficult to predict.
 
-Each image is pushed with a unique tag, which corresponds to the date of the last update (example: `bookworm-20230313` for a build on March 13, 2023). It is therefore possible to fix the download of a version by modifying the `image.version` property to `20230313`.
+Each release image is also pushed with a tag that includes the date of the build (example: `bookworm-13.0.0-20261201` for the build of `13.0.0` on December 1, 2026). It is therefore possible to pin a given build by setting the `image.version` property to `13.0.0-20261201`.

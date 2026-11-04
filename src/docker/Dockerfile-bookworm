@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # check=skip=UndefinedVar
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-bookworm-slim@sha256:ea721098d6ea2894ff9bd8387821a1659d4765d6c014b8d648bb1da16f016f5a AS base
+FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 AS base
 
 # Source platform from buildx "platform" argument
 ARG TARGETPLATFORM
@@ -72,6 +72,20 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,id=apt-lists-${TARGETPLATFORM},
 COPY arch.sh .
 RUN chmod +x arch.sh \
     && bash arch.sh
+
+# Install ASP.NET Core runtime from the Microsoft packages repository, then verify installation
+# Note: Microsoft does not publish a GA "mcr.microsoft.com/dotnet/aspnet" .NET 10 image for this distribution, install the same system-wide runtime as the other flavors
+ENV ASPNETCORE_HTTP_PORTS=8080
+ENV DOTNET_RUNNING_IN_CONTAINER=true
+RUN --mount=target=/var/lib/apt/lists,type=cache,id=apt-lists-${TARGETPLATFORM},sharing=locked --mount=target=/var/cache,type=cache,id=var-cache-${TARGETPLATFORM},sharing=locked \
+    curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o packages-microsoft-prod.deb \
+    && dpkg -i packages-microsoft-prod.deb \
+    && rm packages-microsoft-prod.deb \
+    && apt-get update -q \
+    && apt-get install -y -q --no-install-recommends \
+        aspnetcore-runtime-10.0 \
+        tzdata \
+    && dotnet --list-runtimes
 
 # Persist Python version
 ARG PYTHON_313_VERSION_MAJOR_MINOR

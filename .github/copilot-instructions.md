@@ -54,8 +54,8 @@ Environment variables are centralized in `cicd/env-github-actions.sh` - always s
 
 All Dockerfiles follow the pattern `src/docker/Dockerfile-{flavor}` where flavor corresponds to OS distributions:
 
-- `alpine`, `azurelinux3`, `bookworm`, `trixie`, `jammy`, `noble` (Linux variants)
-- `ubi8`, `ubi9` (Red Hat Enterprise Linux)
+- `alpine`, `azurelinux3`, `bookworm`, `trixie`, `jammy`, `noble`, `resolute` (Linux variants)
+- `ubi8`, `ubi9`, `ubi10` (Red Hat Enterprise Linux)
 - `win-ltsc2022`, `win-ltsc2025` (Windows Server)
 
 Build argument pattern is consistent across all flavors - check `cicd/docker-build-local.sh` for the canonical build argument list.
@@ -211,7 +211,7 @@ All container flavors include standardized tool versions (defined in `cicd/env-g
 ### Base Image Selection
 
 - Prefer official base images from Microsoft, Red Hat, or Canonical
-- Support multiple OS flavors: alpine, azurelinux3, bookworm, trixie, jammy, noble, ubi8, ubi9
+- Support multiple OS flavors: alpine, azurelinux3, bookworm, trixie, jammy, noble, resolute, ubi8, ubi9, ubi10
 - Use minimal/slim variants when available
 - Include Windows support with ltsc2022 and ltsc2025 variants
 

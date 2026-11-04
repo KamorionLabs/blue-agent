@@ -1,6 +1,6 @@
 # Container image configuration
 image:
-  # Container image flavor, can be "alpine", "azurelinux3", "bookworm", "trixie", "jammy", "noble", "ubi8", "ubi9", "win-ltsc2022" or "win-ltsc2025", default is "bookworm"
+  # Container image flavor, can be "alpine", "azurelinux3", "bookworm", "trixie", "jammy", "noble", "resolute", "ubi8", "ubi9", "ubi10", "win-ltsc2022" or "win-ltsc2025", default is "bookworm"
   flavor: bookworm
   # Indicates if the image is for Windows, default is false
   isWindows: false

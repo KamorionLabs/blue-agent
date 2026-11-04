@@ -17,8 +17,10 @@ param extraEnv array = []
   'trixie'
   'jammy'
   'noble'
+  'resolute'
   'ubi8'
   'ubi9'
+  'ubi10'
 ])
 param imageFlavor string = 'bookworm'
 @description('Name of the container image')

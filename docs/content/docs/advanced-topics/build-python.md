@@ -126,8 +126,10 @@ Blue Agent provides Python pre-installed with specific versions optimized for ea
 | `trixie`      | 3.13           | Built from source   |
 | `jammy`       | 3.13           | Built from source   |
 | `noble`       | 3.13           | Built from source   |
+| `resolute`    | 3.13           | Built from source   |
 | `ubi8`        | 3.13           | Built from source   |
 | `ubi9`        | 3.13           | Built from source   |
+| `ubi10`       | 3.13           | Built from source   |
 
 ### Windows Flavors
 

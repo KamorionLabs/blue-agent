@@ -26,6 +26,7 @@ Linux systems are supported, but not Windows:
 | `ghcr.io/kamorionlabs/blue-agent:resolute-main`     | ✅                                                |
 | `ghcr.io/kamorionlabs/blue-agent:ubi8-main`         | ✅                                                |
 | `ghcr.io/kamorionlabs/blue-agent:ubi9-main`         | ✅                                                |
+| `ghcr.io/kamorionlabs/blue-agent:ubi10-main`        | ✅                                                |
 | `ghcr.io/kamorionlabs/blue-agent:win-ltsc2022-main` | ❌                                                |
 | `ghcr.io/kamorionlabs/blue-agent:win-ltsc2025-main` | ❌                                                |
 

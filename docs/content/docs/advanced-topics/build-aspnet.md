@@ -12,6 +12,7 @@ Blue Agent provides a system-wide .NET pre-installed across all container flavor
 | `bookworm`, `trixie`                         | ASP.NET Core 10.0 Runtime | [Microsoft packages repository](https://learn.microsoft.com/en-us/dotnet/core/install/linux-debian) |
 | `jammy`                                      | ASP.NET Core 10.0 Runtime | Official binaries, checked against the SHA-512 of the release metadata                              |
 | `ubi8`, `ubi9`                               | ASP.NET Core 8.0 Runtime  | Red Hat packages                                                                                    |
+| `ubi10`                                      | ASP.NET Core 10.0 Runtime | Red Hat packages                                                                                    |
 | `win-ltsc2022`, `win-ltsc2025`               | .NET 10.0 SDK             | `mcr.microsoft.com/dotnet/sdk` base image                                                           |
 
 Microsoft does not publish a GA `mcr.microsoft.com/dotnet/aspnet` .NET 10 image for Debian or Ubuntu 22.04, so these flavors start from the official distribution image and install the same runtime under `/usr/share/dotnet`, with `dotnet` on the `PATH`.

@@ -506,6 +506,11 @@ jobs:
             platform: linux/amd64
           - os: ubi9
             platform: linux/arm64
+          # Red Hat UBI 10
+          - os: ubi10
+            platform: linux/amd64
+          - os: ubi10
+            platform: linux/arm64
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -658,6 +663,8 @@ jobs:
             ubi8,
             # Red Hat UBI 9
             ubi9,
+            # Red Hat UBI 10
+            ubi10,
           ]
     env:
       IMAGE: ${{ needs.init.outputs.IMAGE }}
@@ -1149,6 +1156,7 @@ jobs:
             resolute,
             ubi8,
             ubi9,
+            ubi10,
           ]
     steps:
       - name: Checkout

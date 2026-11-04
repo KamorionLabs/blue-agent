@@ -2,16 +2,21 @@
 title: Build ASP.NET applications
 ---
 
-Blue Agent provides ASP.NET Core runtime pre-installed across all container flavors. The project includes ASP.NET Core 8.0 runtime by default, but development teams can install specific SDK versions as needed for their build requirements.
+Blue Agent provides a system-wide .NET pre-installed across all container flavors. Linux flavors ship the ASP.NET Core runtime, Windows flavors ship the .NET SDK. Development teams can install specific SDK versions as needed for their build requirements.
 
 ## What's pre-installed
 
-All Blue Agent container images include:
+| Flavor                           | Pre-installed .NET        | Source                                                                                              |
+| -------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `alpine`, `azurelinux3`, `noble` | ASP.NET Core 10.0 Runtime | `mcr.microsoft.com/dotnet/aspnet` base image                                                        |
+| `bookworm`, `trixie`             | ASP.NET Core 10.0 Runtime | [Microsoft packages repository](https://learn.microsoft.com/en-us/dotnet/core/install/linux-debian) |
+| `jammy`                          | ASP.NET Core 10.0 Runtime | Official binaries, checked against the SHA-512 of the release metadata                              |
+| `ubi8`, `ubi9`                   | ASP.NET Core 8.0 Runtime  | Red Hat packages                                                                                    |
+| `win-ltsc2022`, `win-ltsc2025`   | .NET 10.0 SDK             | `mcr.microsoft.com/dotnet/sdk` base image                                                           |
 
-- **ASP.NET Core 8.0 Runtime**: Available across all Linux flavors
-- **ASP.NET Core 8.0 SDK**: Available in Windows flavors
+Microsoft does not publish a GA `mcr.microsoft.com/dotnet/aspnet` .NET 10 image for Debian or Ubuntu 22.04, so these flavors start from the official distribution image and install the same runtime under `/usr/share/dotnet`, with `dotnet` on the `PATH`.
 
-The runtime-only approach for Linux containers keeps the image size minimal while providing the necessary components for running ASP.NET applications.
+The runtime-only approach for Linux containers keeps the image size minimal while providing the necessary components for running ASP.NET applications. The Azure Pipelines agent ships its own .NET runtime and does not depend on the pre-installed one.
 
 ## Recommended approach
 

@@ -476,6 +476,11 @@ jobs:
             platform: linux/amd64
           - os: bookworm
             platform: linux/arm64
+          # Debian Trixie
+          - os: trixie
+            platform: linux/amd64
+          - os: trixie
+            platform: linux/arm64
           # Ubuntu Jammy
           - os: jammy
             platform: linux/amd64
@@ -634,6 +639,8 @@ jobs:
             azurelinux3,
             # Debian Bookworm
             bookworm,
+            # Debian Trixie
+            trixie,
             # Ubuntu Jammy
             jammy,
             # Ubuntu Noble
@@ -1122,7 +1129,7 @@ jobs:
       # Rate limiting on Azure DevOps SaaS APIs is triggered quickly by integration tests, so we need to limit the number of parallel jobs
       max-parallel: 3
       matrix:
-        os: [alpine, azurelinux3, bookworm, jammy, noble, ubi8, ubi9]
+        os: [alpine, azurelinux3, bookworm, trixie, jammy, noble, ubi8, ubi9]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

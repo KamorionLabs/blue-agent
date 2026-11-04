@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # check=skip=UndefinedVar
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-jammy@sha256:3197f427d1ccf6fb9249f86a70acd4b8530c9a72d28bbc5f870bec9a524b350e AS base
+FROM ubuntu:jammy@sha256:076e7bf82319619f28dd0aa9c02ab34b055ad37100395b4f49a2ffba04fb5e11 AS base
 
 # Source platform from buildx "platform" argument
 ARG TARGETPLATFORM
@@ -70,6 +70,26 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,id=apt-lists-${TARGETPLATFORM},
 COPY arch.sh .
 RUN chmod +x arch.sh \
     && bash arch.sh
+
+# Install ASP.NET Core runtime from the official binaries, then verify installation
+# Note: Microsoft publishes neither a GA "mcr.microsoft.com/dotnet/aspnet" .NET 10 image nor .NET 10 packages for Ubuntu 22.04, install the same binaries as the "aspnet" images, checked against the SHA-512 of the release metadata
+ENV ASPNETCORE_HTTP_PORTS=8080
+ENV DOTNET_RUNNING_IN_CONTAINER=true
+RUN --mount=target=/var/lib/apt/lists,type=cache,id=apt-lists-${TARGETPLATFORM},sharing=locked --mount=target=/var/cache,type=cache,id=var-cache-${TARGETPLATFORM},sharing=locked \
+    apt-get update -q \
+    && apt-get install -y -q --no-install-recommends \
+        libicu70 \
+        tzdata \
+    && curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json -o dotnet-releases.json \
+    && jq -e --arg name "aspnetcore-runtime-linux-$(bash arch.sh).tar.gz" '.["latest-release"] as $version | .releases[] | select(.["release-version"] == $version) | .["aspnetcore-runtime"].files[] | select(.name == $name)' dotnet-releases.json > aspnetcore.json \
+    && curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 "$(jq -r .url aspnetcore.json)" -o aspnetcore.tar.gz \
+    && echo "$(jq -r .hash aspnetcore.json)  aspnetcore.tar.gz" > aspnetcore.tar.gz.sha512 \
+    && sha512sum -c aspnetcore.tar.gz.sha512 \
+    && mkdir -p /usr/share/dotnet \
+    && tar -oxzf aspnetcore.tar.gz -C /usr/share/dotnet \
+    && rm aspnetcore.json aspnetcore.tar.gz aspnetcore.tar.gz.sha512 dotnet-releases.json \
+    && ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet \
+    && dotnet --list-runtimes
 
 # Persist Python version
 ARG PYTHON_313_VERSION_MAJOR_MINOR

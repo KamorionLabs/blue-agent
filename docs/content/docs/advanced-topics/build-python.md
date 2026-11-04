@@ -123,6 +123,7 @@ Blue Agent provides Python pre-installed with specific versions optimized for ea
 | `alpine`      | 3.13           | Built from source   |
 | `azurelinux3` | 3.12           | Built from source   |
 | `bookworm`    | 3.13           | Built from source   |
+| `trixie`      | 3.13           | Built from source   |
 | `jammy`       | 3.13           | Built from source   |
 | `noble`       | 3.13           | Built from source   |
 | `ubi8`        | 3.13           | Built from source   |

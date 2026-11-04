@@ -531,7 +531,7 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       # Labels are baked into the per-platform image config here, "docker buildx imagetools create" in the merge job does not carry them
-      # See: https://github.com/clemlesne/blue-agent/issues/421
+      # See original project issue: https://github.com/clemlesne/blue-agent/issues/421
       - name: Container meta
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -727,7 +727,7 @@ jobs:
 
       # Keyless signature (Sigstore, GitHub OIDC identity of this workflow), the image index is signed once by digest, "--recursive" also signs each platform manifest
       # Cosign is retried to avoid breaking the build when the container registry is slow or throttle, with an exponential backoff delay with jitter
-      # See: https://github.com/clemlesne/blue-agent/issues/264
+      # See original project issue: https://github.com/clemlesne/blue-agent/issues/264
       - name: Sign containers
         if: needs.init.outputs.SIGN == 'true'
         run: |
@@ -855,7 +855,7 @@ jobs:
             org.opencontainers.image.vendor=${{ github.repository_owner }}
 
       # Windows images are built with the classic Docker builder, which does not support "--cache-to", but can reuse layers from a pulled image with "--cache-from"
-      # See: https://github.com/clemlesne/blue-agent/issues/296
+      # See original project issue: https://github.com/clemlesne/blue-agent/issues/296
       - name: Pull build cache
         id: cache
         continue-on-error: true
@@ -936,7 +936,7 @@ jobs:
 
       # Keyless signature (Sigstore, GitHub OIDC identity of this workflow), signed once per registry by digest
       # Cosign is retried to avoid breaking the build when the container registry is slow or throttle, with an exponential backoff delay with jitter
-      # See: https://github.com/clemlesne/blue-agent/issues/264
+      # See original project issue: https://github.com/clemlesne/blue-agent/issues/264
       - name: Sign containers
         if: needs.init.outputs.SIGN == 'true'
         run: |

@@ -20,7 +20,7 @@ ENV PIP_RETRIES=8
 ENV PIP_TIMEOUT=120
 
 # Install:
-# - Azure CLI system requirements (C/Rust build tools for libs non pre-built on this platform, plus GNU coreutils for entrypoint)
+# - Azure CLI system requirements (C/Rust build tools for libs non pre-built on this platform, plus GNU coreutils for entrypoint), Python itself is built from source in a dedicated stage
 # - Azure Pipelines agent system requirements
 # - dbus, fuse-overlayfs, iptables, for BuildKit
 # - gzip, make, tar, unzip, wget, zip, zstd, dnsutils, rsync, gnupg, findutils, ca-certificates, for developer ease-of-life
@@ -52,7 +52,6 @@ RUN --mount=target=/var/cache/apk,type=cache,id=apk-${TARGETPLATFORM},sharing=lo
         lsb-release \
         openssl \
         openssl-dev \
-        py3-pip \
         rsync \
         shadow \
         sudo \
@@ -104,32 +103,26 @@ RUN --mount=target=/rootlesskit-${ROOTLESSKIT_VERSION},type=cache,id=rootlesskit
 FROM base AS python
 
 # Build Python from source, then verify installation
-ARG PYTHON_VERSION
-ENV PYTHON_VERSION=${PYTHON_VERSION}
+# Note: Runtime shared libraries are listed in "/python-rundeps.txt", for the final stage to install them without the build headers
 RUN --mount=target=/var/cache/apk,type=cache,id=apk-${TARGETPLATFORM},sharing=locked --mount=target=/Python-${PYTHON_VERSION},type=cache,id=python-${PYTHON_VERSION}-${TARGETPLATFORM},sharing=locked \
     apk update \
     && apk add \
-        bzip2 \
         bzip2-dev \
         dpkg \
         dpkg-dev \
-        expat \
-        expat-devel \
-        gdb \
-        gdbm-devel \
-        glibc-devel \
-        libffi-devel \
-        libstdc++-devel \
-        libuuid-devel \
-        libxml2-devel \
-        ncurses-devel \
+        gdbm-dev \
+        libnsl-dev \
+        libtirpc-dev \
+        ncurses-dev \
+        pax-utils \
         readline-dev \
-        sqlite \
         sqlite-dev \
-        tk-dev \
+        util-linux-dev \
         xz-dev \
         zlib-dev \
     && curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz -o python.tgz \
+    # Start from a clean source tree, the cache mount keeps the tree of previous builds, including failed ones (stale PGO stamps break the next build)
+    && find Python-${PYTHON_VERSION} -mindepth 1 -delete \
     && tar -xzf python.tgz \
     && rm python.tgz \
     && cd Python-${PYTHON_VERSION} \
@@ -140,16 +133,53 @@ RUN --mount=target=/var/cache/apk,type=cache,id=apk-${TARGETPLATFORM},sharing=lo
         --with-ensurepip=install \
         --with-lto \
     && make profile-removal \
-    && extra_cflags="$(dpkg-buildflags --get CFLAGS)" \
-    && ldflags="$(dpkg-buildflags --get LDFLAGS)" \
-    && make -j $(nproc) "EXTRA_CFLAGS=${extra_cflags:-}" "LDFLAGS=${ldflags:-}" \
+    # musl default thread stack size (128 KiB) is too small for Python, use 1 MiB like glibc
+    # musl has no ISO-8859-1 locale support, skip the two "re.LOCALE" tests of the PGO training run, which otherwise fail the build
+    && make -j $(nproc) \
+        "EXTRA_CFLAGS=-DTHREAD_STACK_SIZE=0x100000" \
+        "LDFLAGS=-Wl,--strip-all" \
+        'PROFILE_TASK=-m test --pgo --timeout=$(TESTTIMEOUT) --ignore test.test_re.ReTests.test_locale_caching --ignore test.test_re.ReTests.test_locale_compiled' \
     && make install \
     && cd .. \
     && python3 --version \
     && python3 -m pip --version \
+    && find /usr/local -type f -executable -not -name '*tkinter*' -exec scanelf --needed --nobanner --format '%n#p' '{}' ';' \
+        | tr ',' '\n' \
+        | sort -u \
+        | awk 'system("[ -e /usr/local/lib/" $1 " ]") == 0 { next } { print "so:" $1 }' > /python-rundeps.txt \
+    && cat /python-rundeps.txt \
+    # Cleanup Python cache
     && find / -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
 
+FROM python AS awscli
+
+# Install AWS CLI from sources as bins are published with glibc, then verify installation
+# Note: Built with the source-built Python, as the AWS CLI virtual environment links to the interpreter it was built with
+# See: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-source-install.html
+ARG AWS_CLI_VERSION
+ENV AWS_CLI_VERSION=${AWS_CLI_VERSION}
+RUN --mount=target=/var/cache/apk,type=cache,id=apk-${TARGETPLATFORM},sharing=locked \
+    apk add \
+        cmake \
+        g++ \
+        gcc \
+        libc-dev \
+    && curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://awscli.amazonaws.com/awscli-${AWS_CLI_VERSION}.tar.gz | tar -xz \
+    && cd awscli-${AWS_CLI_VERSION} \
+    && ./configure \
+        --prefix=/usr/local/aws-cli/ \
+        --with-download-deps \
+    && make \
+    && make install \
+    && /usr/local/aws-cli/bin/aws --version
+
 FROM base
+
+# Install Python runtime dependencies
+COPY --from=python /python-rundeps.txt /tmp/python-rundeps.txt
+RUN --mount=target=/var/cache/apk,type=cache,id=apk-${TARGETPLATFORM},sharing=locked \
+    apk add $(cat /tmp/python-rundeps.txt) \
+    && rm /tmp/python-rundeps.txt
 
 # Install Python, then verify installation
 COPY --from=python /usr/local/bin/python${PYTHON_313_VERSION_MAJOR_MINOR} /usr/local/bin/python${PYTHON_313_VERSION_MAJOR_MINOR}
@@ -179,30 +209,7 @@ RUN --mount=target=/${USER}/.cache/pip,type=cache,id=pip-${PYTHON_313_VERSION_MA
             azure-cli==${AZURE_CLI_VERSION} \
     && az version \
     && rm -rf ${HOME}/.azure ${HOME}/.cache/pip \
-    && find / -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
-
-FROM base AS awscli
-
-# Install AWS CLI from sources as bins are published with glibc, then verify installation
-# See: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-source-install.html
-ARG AWS_CLI_VERSION
-ENV AWS_CLI_VERSION=${AWS_CLI_VERSION}
-RUN --mount=target=/var/cache/apk,type=cache,id=apk-${TARGETPLATFORM},sharing=locked \
-    apk add \
-        cmake \
-        g++ \
-        gcc \
-        libc-dev \
-    && curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://awscli.amazonaws.com/awscli-${AWS_CLI_VERSION}.tar.gz | tar -xz \
-    && cd awscli-${AWS_CLI_VERSION} \
-    && ./configure \
-        --prefix=/usr/local/aws-cli/ \
-        --with-download-deps \
-    && make \
-    && make install \
-    && /usr/local/aws-cli/bin/aws --version
-
-FROM base
+    && find /usr/local -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
 
 # Copy AWS CLI bins, then verify installation
 COPY --from=awscli /usr/local/aws-cli/ /usr/local/aws-cli/
@@ -220,7 +227,7 @@ RUN curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://dl.goo
     && ln -s /usr/local/google-cloud-sdk/bin/gsutil /usr/bin/gsutil \
     && gcloud version \
     && rm -rf /usr/local/google-cloud-sdk/.install ${HOME}/.config/gcloud \
-    && find / -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
+    && find /usr/local -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
 
 # TODO: Install PowerShell here once it'll be distribued with both X64 and ARM64 targets (only X64 today, see: https://github.com/PowerShell/PowerShell/issues/25762)
 
@@ -266,6 +273,10 @@ ENV agent.disableupdate="1"
 RUN mkdir -p ${AZP_HOME} \
     && curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://download.agent.dev.azure.com/agent/${AZP_AGENT_VERSION}/vsts-agent-linux-musl-$(bash arch.sh)-${AZP_AGENT_VERSION}.tar.gz | tar -xz -C ${AZP_HOME} \
     && cd ${AZP_HOME} \
+    # Microsoft publishes no musl "pipelines-agent" package, the musl "vsts-agent" one still bundles end-of-life Node.js task runners: remove them, to ship the same Node 20 and 24 runners as the glibc flavors
+    && rm -rf externals/node externals/node6 externals/node10 externals/node16 \
+    && externals/node20_1/bin/node --version \
+    && externals/node24/bin/node --version \
     && chmod +x run-docker.sh config.sh \
     && AGENT_ALLOW_RUNASROOT="1" bash run-docker.sh --version \
     && rm -rf _diag \

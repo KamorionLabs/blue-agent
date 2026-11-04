@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # check=skip=UndefinedVar
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.10@sha256:5b195cf0b8eb2262ce81334ee44066fdb5026022803f55bfe607be7d08d4fe43 AS base
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.10@sha256:62d3baa1ca1cdc4613ad79521b21bdef5baa81ea9167441c731acef18b8253cf AS base
 
 # Source platform from buildx "platform" argument
 ARG TARGETPLATFORM

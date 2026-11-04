@@ -86,6 +86,10 @@ For detailed information about template container behavior, common errors, and t
 
 OS support is generally called "flavor" in this documentation. The following table shows the supported flavors and their characteristics.
 
+{{< callout type="warning" >}}
+The `jammy`, `ubi8` and `bookworm` flavors are deprecated and will be removed in v14.0.0. Migrate to `noble` or `resolute`, `ubi9` or `ubi10`, and `trixie` respectively.
+{{< /callout >}}
+
 | `Ref`                                               | OS                                                                               | `Arch`              | Support                                                                                                                                           |
 | --------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ghcr.io/kamorionlabs/blue-agent:alpine-main`       | [Alpine Linux (3.21)](https://alpinelinux.org/posts/Alpine-3.21.0-released.html) | `amd64`, `arm64/v8` | [See Alpine Linux wiki.](https://alpinelinux.org/releases)                                                                                        |

@@ -1,0 +1,12 @@
+Blue Agent
+Copyright Clémence Lesné and contributors (https://github.com/clemlesne/blue-agent)
+
+This product is a fork of Blue Agent (https://github.com/clemlesne/blue-agent),
+originally created by Clémence Lesné, itself derived from
+emberstack/docker-azure-pipelines-agent
+(https://github.com/emberstack/docker-azure-pipelines-agent).
+
+Modifications since November 2026 are maintained by KamorionLabs
+(https://github.com/KamorionLabs/blue-agent).
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file.

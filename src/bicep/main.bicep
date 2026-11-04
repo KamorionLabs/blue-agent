@@ -21,7 +21,7 @@ param extraEnv array = []
 ])
 param imageFlavor string = 'bookworm'
 @description('Name of the container image')
-param imageName string = 'clemlesne/blue-agent'
+param imageName string = 'kamorionlabs/blue-agent'
 @description('Registry of the container image')
 @allowed([
   'docker.io'
@@ -62,7 +62,7 @@ var tags = {
   application: 'blue-agent'
   instance: instance
   managed_by: 'Bicep'
-  sources: 'https://github.com/clemlesne/blue-agent'
+  sources: 'https://github.com/KamorionLabs/blue-agent'
   version: imageVersion
 }
 

@@ -1,6 +1,10 @@
 # Authors
 
-- [Clémence Lesné](https://github.com/clemlesne)
+- [Clémence Lesné](https://github.com/clemlesne), creator of [the original project, clemlesne/blue-agent](https://github.com/clemlesne/blue-agent)
+
+Maintainers of this fork:
+
+- [KamorionLabs](https://github.com/KamorionLabs)
 
 Authors of [the original project, emberstack/docker-azure-pipelines-agent](https://github.com/emberstack/docker-azure-pipelines-agent), which this project is forked from (sorted alphabetically):
 

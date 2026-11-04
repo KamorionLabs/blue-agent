@@ -15,17 +15,17 @@ We choose BuildKit for this project. [Its license](https://raw.githubusercontent
 
 Linux systems are supported, but not Windows:
 
-| `Ref`                                            | Container build inside of the agent with BuildKit |
-| ------------------------------------------------ | ------------------------------------------------- |
-| `ghcr.io/clemlesne/blue-agent:alpine-main`       | ✅                                                |
-| `ghcr.io/clemlesne/blue-agent:azurelinux3-main`  | ✅                                                |
-| `ghcr.io/clemlesne/blue-agent:bookworm-main`     | ✅                                                |
-| `ghcr.io/clemlesne/blue-agent:jammy-main`        | ✅                                                |
-| `ghcr.io/clemlesne/blue-agent:noble-main`        | ✅                                                |
-| `ghcr.io/clemlesne/blue-agent:ubi8-main`         | ✅                                                |
-| `ghcr.io/clemlesne/blue-agent:ubi9-main`         | ✅                                                |
-| `ghcr.io/clemlesne/blue-agent:win-ltsc2022-main` | ❌                                                |
-| `ghcr.io/clemlesne/blue-agent:win-ltsc2025-main` | ❌                                                |
+| `Ref`                                               | Container build inside of the agent with BuildKit |
+| --------------------------------------------------- | ------------------------------------------------- |
+| `ghcr.io/kamorionlabs/blue-agent:alpine-main`       | ✅                                                |
+| `ghcr.io/kamorionlabs/blue-agent:azurelinux3-main`  | ✅                                                |
+| `ghcr.io/kamorionlabs/blue-agent:bookworm-main`     | ✅                                                |
+| `ghcr.io/kamorionlabs/blue-agent:jammy-main`        | ✅                                                |
+| `ghcr.io/kamorionlabs/blue-agent:noble-main`        | ✅                                                |
+| `ghcr.io/kamorionlabs/blue-agent:ubi8-main`         | ✅                                                |
+| `ghcr.io/kamorionlabs/blue-agent:ubi9-main`         | ✅                                                |
+| `ghcr.io/kamorionlabs/blue-agent:win-ltsc2022-main` | ❌                                                |
+| `ghcr.io/kamorionlabs/blue-agent:win-ltsc2025-main` | ❌                                                |
 
 #### How to use the bundled BuildKit
 
@@ -33,7 +33,7 @@ There are two components, the backend, `buildkitd`, and the CLI, `buildctl`.
 
 Requirements:
 
-- Setup special security requirements, you can find them [in the example file `container-build.yaml`](https://github.com/clemlesne/blue-agent/blob/main/example/helm/container-build.yaml).
+- Setup special security requirements, you can find them [in the example file `container-build.yaml`](https://github.com/KamorionLabs/blue-agent/blob/main/example/helm/container-build.yaml).
 - In the pipeline, run `buildkitd` before using `buildctl`.
 
 ```yaml

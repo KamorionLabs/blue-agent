@@ -66,13 +66,13 @@ Details about the Helm configuration [can be found in a dedicated section](../ad
 
 ### Install the chart
 
-Use Helm to install the latest released chart:
+Use Helm to install the latest released chart, published as an OCI artifact on GitHub Container Registry:
 
 ```bash
-helm repo add clemlesne-blue-agent https://clemlesne.github.io/blue-agent
-helm repo update
-helm upgrade --install agent clemlesne-blue-agent/blue-agent
+helm upgrade --install agent oci://ghcr.io/kamorionlabs/charts/blue-agent
 ```
+
+A specific version can be pinned with `--version` (e.g. `--version 13.0.0`). Charts up to `12.0.1` were published by the original project and are not republished here.
 
 {{% /steps %}}
 
@@ -86,18 +86,20 @@ For detailed information about template container behavior, common errors, and t
 
 OS support is generally called "flavor" in this documentation. The following table shows the supported flavors and their characteristics.
 
-| `Ref`                                            | OS                                                                               | `Size`                                                                                                             | `Arch`              | Support                                                                                                                                           |
-| ------------------------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ghcr.io/clemlesne/blue-agent:alpine-main`       | [Alpine Linux (3.21)](https://alpinelinux.org/posts/Alpine-3.21.0-released.html) | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clemlesne/blue-agent/alpine-main?label=)       | `amd64`, `arm64/v8` | [See Alpine Linux wiki.](https://alpinelinux.org/releases)                                                                                        |
-| `ghcr.io/clemlesne/blue-agent:azurelinux3-main`  | [Azure Linux 3](https://github.com/microsoft/azurelinux)                         | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clemlesne/blue-agent/azurelinux3-main?label=)  | `amd64`, `arm64/v8` | [See Microsoft Azure documentation.](https://learn.microsoft.com/en-us/azure/aks/support-policies)                                                |
-| `ghcr.io/clemlesne/blue-agent:bookworm-main`     | [Debian Bookworm (12)](https://www.debian.org/releases/bookworm) slim            | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clemlesne/blue-agent/bookworm-main?label=)     | `amd64`, `arm64/v8` | [See Debian LTS wiki.](https://wiki.debian.org/LTS)                                                                                               |
-| `ghcr.io/clemlesne/blue-agent:noble-main`        | [Ubuntu Noble (24.04)](https://www.releases.ubuntu.com/noble) minimal            | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clemlesne/blue-agent/noble-main?label=)        | `amd64`, `arm64/v8` | [See Ubuntu LTS wiki.](https://wiki.ubuntu.com/Releases)                                                                                          |
-| `ghcr.io/clemlesne/blue-agent:jammy-main`        | [Ubuntu Jammy (22.04)](https://www.releases.ubuntu.com/jammy) minimal            | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clemlesne/blue-agent/jammy-main?label=)        | `amd64`, `arm64/v8` | [See Ubuntu LTS wiki.](https://wiki.ubuntu.com/Releases)                                                                                          |
-| `ghcr.io/clemlesne/blue-agent:ubi9-main`         | [Red Hat UBI 9](https://developers.redhat.com/articles/ubi-faq) minimal          | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clemlesne/blue-agent/ubi9-main?label=)         | `amd64`, `arm64/v8` | [See Red Hat product life cycles.](https://access.redhat.com/product-life-cycles/?product=Red%20Hat%20Enterprise%20Linux)                         |
-| `ghcr.io/clemlesne/blue-agent:ubi8-main`         | [Red Hat UBI 8](https://developers.redhat.com/articles/ubi-faq) minimal          | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clemlesne/blue-agent/ubi8-main?label=)         | `amd64`, `arm64/v8` | [See Red Hat product life cycles.](https://access.redhat.com/product-life-cycles/?product=Red%20Hat%20Enterprise%20Linux)                         |
-| `ghcr.io/clemlesne/blue-agent:win-ltsc2022-main` | [Windows Server 2022](https://learn.microsoft.com/en-us/windows-server) Core     | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clemlesne/blue-agent/win-ltsc2022-main?label=) | `amd64`             | [See base image servicing lifecycles.](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/base-image-lifecycle) |
-| `ghcr.io/clemlesne/blue-agent:win-ltsc2025-main` | [Windows Server 2025](https://learn.microsoft.com/en-us/windows-server) Core     | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clemlesne/blue-agent/win-ltsc2025-main?label=) | `amd64`             | [See base image servicing lifecycles.](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/base-image-lifecycle) |
+| `Ref`                                               | OS                                                                               | `Arch`              | Support                                                                                                                                           |
+| --------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ghcr.io/kamorionlabs/blue-agent:alpine-main`       | [Alpine Linux (3.21)](https://alpinelinux.org/posts/Alpine-3.21.0-released.html) | `amd64`, `arm64/v8` | [See Alpine Linux wiki.](https://alpinelinux.org/releases)                                                                                        |
+| `ghcr.io/kamorionlabs/blue-agent:azurelinux3-main`  | [Azure Linux 3](https://github.com/microsoft/azurelinux)                         | `amd64`, `arm64/v8` | [See Microsoft Azure documentation.](https://learn.microsoft.com/en-us/azure/aks/support-policies)                                                |
+| `ghcr.io/kamorionlabs/blue-agent:bookworm-main`     | [Debian Bookworm (12)](https://www.debian.org/releases/bookworm) slim            | `amd64`, `arm64/v8` | [See Debian LTS wiki.](https://wiki.debian.org/LTS)                                                                                               |
+| `ghcr.io/kamorionlabs/blue-agent:noble-main`        | [Ubuntu Noble (24.04)](https://www.releases.ubuntu.com/noble) minimal            | `amd64`, `arm64/v8` | [See Ubuntu LTS wiki.](https://wiki.ubuntu.com/Releases)                                                                                          |
+| `ghcr.io/kamorionlabs/blue-agent:jammy-main`        | [Ubuntu Jammy (22.04)](https://www.releases.ubuntu.com/jammy) minimal            | `amd64`, `arm64/v8` | [See Ubuntu LTS wiki.](https://wiki.ubuntu.com/Releases)                                                                                          |
+| `ghcr.io/kamorionlabs/blue-agent:ubi9-main`         | [Red Hat UBI 9](https://developers.redhat.com/articles/ubi-faq) minimal          | `amd64`, `arm64/v8` | [See Red Hat product life cycles.](https://access.redhat.com/product-life-cycles/?product=Red%20Hat%20Enterprise%20Linux)                         |
+| `ghcr.io/kamorionlabs/blue-agent:ubi8-main`         | [Red Hat UBI 8](https://developers.redhat.com/articles/ubi-faq) minimal          | `amd64`, `arm64/v8` | [See Red Hat product life cycles.](https://access.redhat.com/product-life-cycles/?product=Red%20Hat%20Enterprise%20Linux)                         |
+| `ghcr.io/kamorionlabs/blue-agent:win-ltsc2022-main` | [Windows Server 2022](https://learn.microsoft.com/en-us/windows-server) Core     | `amd64`             | [See base image servicing lifecycles.](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/base-image-lifecycle) |
+| `ghcr.io/kamorionlabs/blue-agent:win-ltsc2025-main` | [Windows Server 2025](https://learn.microsoft.com/en-us/windows-server) Core     | `amd64`             | [See base image servicing lifecycles.](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/base-image-lifecycle) |
 
-## Docker Hub images
+## Container registries
 
-Container images are both published to GitHub Container Registry and Docker Hub. URLs showed in the doc are GitHub Container Registry URLs, for simplicity. To use Docker Hub, replace `ghcr.io/clemlesne/blue-agent` by `docker.io/clemlesne/blue-agent`. Docker Hub images are signed and secured the same way. [See the images at hub.docker.com.](https://hub.docker.com/r/clemlesne/blue-agent)
+Container images are published to GitHub Container Registry, at `ghcr.io/kamorionlabs/blue-agent`. Each image is tagged `<flavor>-<version>` (e.g. `bookworm-13.0.0`), the Helm chart uses the tag matching its own version by default. Rolling tags are also available: `<flavor>-latest` (latest release), `<flavor>-<major>` and `<flavor>-<major>.<minor>`, `<flavor>-main` (development branch).
+
+Images up to `12.0.1` were published by the original project at `ghcr.io/clemlesne/blue-agent` and `docker.io/clemlesne/blue-agent`, they are not maintained anymore.

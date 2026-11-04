@@ -24,4 +24,4 @@ Checks:
 ⚠️ Local temporary folder is configured to use an host dir. Be careful with performance and data leakage!
 {{- end -}}
 
-Contribute to this project on GitHub (https://github.com/clemlesne/blue-agent). Happy pipelines! 🙂
+Contribute to this project on GitHub (https://github.com/KamorionLabs/blue-agent). Happy pipelines! 🙂

@@ -126,7 +126,7 @@ allowPrivilegeEscalation: false
 runAsUser: 0
 capabilities:
   # Add enough default capabilities to allow the agent to unzip files and change file ownership
-  # See: https://github.com/clemlesne/blue-agent/issues/23#issuecomment-2444929885
+  # See original project issue: https://github.com/clemlesne/blue-agent/issues/23#issuecomment-2444929885
   add:
     - CHOWN
     - FOWNER

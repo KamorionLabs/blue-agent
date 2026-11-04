@@ -1,3 +1,4 @@
+baseURL: https://kamorionlabs.github.io/blue-agent/
 languageCode: en-us
 theme: hextra
 title: Blue Agent
@@ -9,11 +10,6 @@ enableEmoji: true
 imaging:
   quality: 75
   resampleFilter: MitchellNetravali
-
-services:
-  googleAnalytics:
-    # Website: https://clemlesne.github.io/blue-agent
-    ID: G-4JZ51TVMEQ
 
 defaultContentLanguage: en
 languages:
@@ -41,17 +37,17 @@ menu:
       weight: 2
     - name: Releases ↗
       weight: 3
-      url: https://github.com/clemlesne/blue-agent/releases
-    - name: Docker Hub ↗
+      url: https://github.com/KamorionLabs/blue-agent/releases
+    - name: Container registry ↗
       weight: 4
-      url: https://hub.docker.com/r/clemlesne/blue-agent
+      url: https://github.com/KamorionLabs/blue-agent/pkgs/container/blue-agent
     - name: Search
       weight: 5
       params:
         type: search
     - name: GitHub ↗
       weight: 6
-      url: "https://github.com/clemlesne/blue-agent"
+      url: "https://github.com/KamorionLabs/blue-agent"
       params:
         icon: github
   sidebar:
@@ -75,4 +71,4 @@ params:
   displayUpdatedDate: true
   editURL:
     enable: true
-    base: https://github.com/clemlesne/blue-agent/edit/main/docs/content
+    base: https://github.com/KamorionLabs/blue-agent/edit/main/docs/content

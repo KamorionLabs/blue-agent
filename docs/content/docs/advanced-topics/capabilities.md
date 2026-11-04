@@ -32,7 +32,7 @@ extraNodeSelectors:
 Deploy the Helm instance:
 
 ```bash
-❯ helm upgrade --install agent-arm64 clemlesne-blue-agent/blue-agent -f values.yaml
+❯ helm upgrade --install agent-arm64 oci://ghcr.io/kamorionlabs/charts/blue-agent -f values.yaml
 ```
 
 Update the Azure Pipelines file in the repository to use the new pool:

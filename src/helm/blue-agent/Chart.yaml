@@ -8,7 +8,7 @@ type: application
 kubeVersion: ">= 1.19.0-0"
 version: 0.0.0
 appVersion: 0.0.0
-icon: https://raw.githubusercontent.com/clemlesne/blue-agent/master/docs/static/favicon.svg
+icon: https://raw.githubusercontent.com/KamorionLabs/blue-agent/main/docs/static/favicon.svg
 keywords:
   - agent
   - auto-scale
@@ -24,13 +24,20 @@ keywords:
   - pipelines
   - self-hosted
   - self-hosted-agent
-home: https://github.com/clemlesne/blue-agent
+home: https://kamorionlabs.github.io/blue-agent
 sources:
+  - https://github.com/KamorionLabs/blue-agent
+  # Original project, created by Clémence Lesné
   - https://github.com/clemlesne/blue-agent
 maintainers:
-  - name: Clémence Lesné
-    email: clemlesne@users.noreply.github.com
+  - name: KamorionLabs
+    url: https://github.com/KamorionLabs
 annotations:
   artifacthub.io/category: integration-delivery
   artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://kamorionlabs.github.io/blue-agent
+    - name: Original project
+      url: https://github.com/clemlesne/blue-agent
   artifacthub.io/prerelease: "false"

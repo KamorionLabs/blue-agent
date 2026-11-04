@@ -1,4 +1,4 @@
-.PHONY: test lint build-docker docs build-docs
+.PHONY: test test-static test-bicep lint build-docker docs build-docs
 
 # Required parameters
 flavor ?= null
@@ -15,7 +15,10 @@ container_specs ?= $(shell az containerapp job show --name "$(job_name)" --resou
 job_image ?= $(shell echo $(container_specs) | yq '.image')
 job_env ?= $(shell echo $(container_specs) | yq '.env[] | select(.secretRef) | .name + "=secretref:" + .secretRef') $(shell echo $(container_specs) | yq '.env[] | select(has("secretRef") | not) | .name + "=" + (.value // "")')
 
-test:
+test: test-static test-bicep
+
+# Static tests, no cloud credentials required
+test-static:
 	@echo "➡️ Running Prettier"
 	npx --yes prettier@2.8.8 --editorconfig --check .
 
@@ -28,6 +31,12 @@ test:
 		--values test/helm/blue-agent/values.yaml \
 		src/helm/blue-agent
 
+	@echo "➡️ Running Bicep lint"
+	az bicep lint \
+		--file src/bicep/main.bicep
+
+# Requires an authenticated Azure CLI
+test-bicep:
 	@echo "➡️ Running Azure Bicep validate"
 	az deployment sub validate \
 		--location westeurope \

@@ -10,7 +10,7 @@ Blue Agent is a self-hosted Azure Pipelines agent designed to run in Kubernetes 
 
 - **Cost Efficiency**: Dynamic provisioning with KEDA auto-scaling (0 to 100+ agents in seconds)
 - **Performance**: Customizable performance beyond Microsoft-hosted agent limitations
-- **Security**: SBOM generation, Cosign signing, daily system updates, air-gapped capability
+- **Security**: SBOM generation, Cosign signing, monthly rebuilds of released images, air-gapped capability
 - **Flexibility**: Multi-OS support (Azure Linux, Debian, Ubuntu, RHEL, Windows Server)
 - **Container Building**: Built-in BuildKit support for container builds
 - **Self-Management**: Agent auto-registration and restart capabilities
@@ -152,7 +152,7 @@ triggers:
 - Example deployment:
 
 ```bash
-helm install blue-agent clemlesne-blue-agent/blue-agent \
+helm install blue-agent oci://ghcr.io/kamorionlabs/charts/blue-agent \
   --set pipelines.organizationURL="https://dev.azure.com/myorg" \
   --set pipelines.personalAccessToken="pat_token" \
   --set pipelines.poolName="my-pool"
@@ -181,7 +181,7 @@ Both support `managed-csi` type for Azure integration and can be disabled via `v
 - Prefer Helm over kubectl for all Kubernetes deployments
 - Use `helm install` and `helm upgrade` commands in documentation
 - Never suggest `kubectl apply` for application deployments
-- Example: `helm install blue-agent clemlesne-blue-agent/blue-agent --values values.yaml`
+- Example: `helm install blue-agent oci://ghcr.io/kamorionlabs/charts/blue-agent --values values.yaml`
 
 ### Bicep for Azure Resources
 
@@ -220,13 +220,13 @@ All container flavors include standardized tool versions (defined in `cicd/env-g
 - Include OCI-compliant labels in all container images
 - Add ArtifactHub metadata for discoverability
 - Use semantic versioning for image tags
-- Registry support: Both GHCR (`ghcr.io`) and Docker Hub (`docker.io`)
+- Registry support: GHCR (`ghcr.io`), Docker Hub (`docker.io`) is an optional mirror
 
 ## Documentation Standards
 
 ### Hugo Documentation Architecture
 
-- Documentation site: `clemlesne.github.io/blue-agent`
+- Documentation site: `kamorionlabs.github.io/blue-agent`
 - Hugo configuration: `docs/hugo.yaml`
 - Theme: Hextra (Git submodule at `docs/themes/hextra/`)
 - Structure: `/docs` (getting started), `/docs/advanced-topics`, `/docs/troubleshooting`

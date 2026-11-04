@@ -273,6 +273,10 @@ ENV agent.disableupdate="1"
 RUN mkdir -p ${AZP_HOME} \
     && curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://download.agent.dev.azure.com/agent/${AZP_AGENT_VERSION}/vsts-agent-linux-musl-$(bash arch.sh)-${AZP_AGENT_VERSION}.tar.gz | tar -xz -C ${AZP_HOME} \
     && cd ${AZP_HOME} \
+    # Microsoft publishes no musl "pipelines-agent" package, the musl "vsts-agent" one still bundles end-of-life Node.js task runners: remove them, to ship the same Node 20 and 24 runners as the glibc flavors
+    && rm -rf externals/node externals/node6 externals/node10 externals/node16 \
+    && externals/node20_1/bin/node --version \
+    && externals/node24/bin/node --version \
     && chmod +x run-docker.sh config.sh \
     && AGENT_ALLOW_RUNASROOT="1" bash run-docker.sh --version \
     && rm -rf _diag \

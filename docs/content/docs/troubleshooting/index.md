@@ -155,3 +155,7 @@ Set a technical pipeline timeout longer than the functional pipeline timeout to 
 {{< /callout >}}
 
 ![Configuration in the web interface.](build-job-timeout-in-minutes.png)
+
+## A task fails with `This step requires a node version that does not exist in the agent filesystem`
+
+The task only declares an end-of-life Node.js handler (6, 10 or 16), which Linux images no longer ship, including the `alpine` flavor. Upgrade the task to a recent major version, or force the Node.js 24 runner with the `AGENT_USE_NODE24: true` pipeline variable. See [Node.js task runners](/docs/advanced-topics/provided-software/#linux-nodejs-task-runners).

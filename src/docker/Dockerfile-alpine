@@ -209,7 +209,7 @@ RUN --mount=target=/${USER}/.cache/pip,type=cache,id=pip-${PYTHON_313_VERSION_MA
             azure-cli==${AZURE_CLI_VERSION} \
     && az version \
     && rm -rf ${HOME}/.azure ${HOME}/.cache/pip \
-    && find / -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
+    && find /usr/local -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
 
 # Copy AWS CLI bins, then verify installation
 COPY --from=awscli /usr/local/aws-cli/ /usr/local/aws-cli/
@@ -227,7 +227,7 @@ RUN curl -LsSf --retry 8 --retry-all-errors --connect-timeout 120 https://dl.goo
     && ln -s /usr/local/google-cloud-sdk/bin/gsutil /usr/bin/gsutil \
     && gcloud version \
     && rm -rf /usr/local/google-cloud-sdk/.install ${HOME}/.config/gcloud \
-    && find / -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
+    && find /usr/local -depth -type d -name __pycache__ -exec rm -rf {} \; 2> /dev/null
 
 # TODO: Install PowerShell here once it'll be distribued with both X64 and ARM64 targets (only X64 today, see: https://github.com/PowerShell/PowerShell/issues/25762)
 

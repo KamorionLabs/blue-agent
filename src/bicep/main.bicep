@@ -14,6 +14,7 @@ param extraEnv array = []
   'alpine'
   'azurelinux3'
   'bookworm'
+  'trixie'
   'jammy'
   'noble'
   'ubi8'

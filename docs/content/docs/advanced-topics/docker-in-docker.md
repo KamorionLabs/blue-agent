@@ -20,6 +20,7 @@ Linux systems are supported, but not Windows:
 | `ghcr.io/kamorionlabs/blue-agent:alpine-main`       | ✅                                                |
 | `ghcr.io/kamorionlabs/blue-agent:azurelinux3-main`  | ✅                                                |
 | `ghcr.io/kamorionlabs/blue-agent:bookworm-main`     | ✅                                                |
+| `ghcr.io/kamorionlabs/blue-agent:trixie-main`       | ✅                                                |
 | `ghcr.io/kamorionlabs/blue-agent:jammy-main`        | ✅                                                |
 | `ghcr.io/kamorionlabs/blue-agent:noble-main`        | ✅                                                |
 | `ghcr.io/kamorionlabs/blue-agent:ubi8-main`         | ✅                                                |

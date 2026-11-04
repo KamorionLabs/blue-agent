@@ -95,9 +95,11 @@ OS support is generally called "flavor" in this documentation. The following tab
 | `ghcr.io/kamorionlabs/blue-agent:noble-main`        | [Ubuntu Noble (24.04)](https://www.releases.ubuntu.com/noble) minimal            | `amd64`, `arm64/v8` | [See Ubuntu LTS wiki.](https://wiki.ubuntu.com/Releases)                                                                                          |
 | `ghcr.io/kamorionlabs/blue-agent:jammy-main`        | [Ubuntu Jammy (22.04)](https://www.releases.ubuntu.com/jammy) minimal            | `amd64`, `arm64/v8` | [See Ubuntu LTS wiki.](https://wiki.ubuntu.com/Releases)                                                                                          |
 | `ghcr.io/kamorionlabs/blue-agent:ubi9-main`         | [Red Hat UBI 9](https://developers.redhat.com/articles/ubi-faq) minimal          | `amd64`, `arm64/v8` | [See Red Hat product life cycles.](https://access.redhat.com/product-life-cycles/?product=Red%20Hat%20Enterprise%20Linux)                         |
-| `ghcr.io/kamorionlabs/blue-agent:ubi8-main`         | [Red Hat UBI 8](https://developers.redhat.com/articles/ubi-faq) minimal          | `amd64`, `arm64/v8` | [See Red Hat product life cycles.](https://access.redhat.com/product-life-cycles/?product=Red%20Hat%20Enterprise%20Linux)                         |
+| `ghcr.io/kamorionlabs/blue-agent:ubi8-main`         | [Red Hat UBI 8](https://developers.redhat.com/articles/ubi-faq) minimal          | `amd64`             | [See Red Hat product life cycles.](https://access.redhat.com/product-life-cycles/?product=Red%20Hat%20Enterprise%20Linux)                         |
 | `ghcr.io/kamorionlabs/blue-agent:win-ltsc2022-main` | [Windows Server 2022](https://learn.microsoft.com/en-us/windows-server) Core     | `amd64`             | [See base image servicing lifecycles.](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/base-image-lifecycle) |
 | `ghcr.io/kamorionlabs/blue-agent:win-ltsc2025-main` | [Windows Server 2025](https://learn.microsoft.com/en-us/windows-server) Core     | `amd64`             | [See base image servicing lifecycles.](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/base-image-lifecycle) |
+
+The `ubi8` flavor is built for `amd64` only: PowerShell Linux `arm64` releases need glibc 2.33 or later since 7.4.20, and UBI 8 ships glibc 2.28. Use `ubi9` for Red Hat on `arm64`.
 
 ## Container registries
 

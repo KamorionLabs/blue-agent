@@ -494,8 +494,6 @@ jobs:
           # Red Hat UBI 8
           - os: ubi8
             platform: linux/amd64
-          - os: ubi8
-            platform: linux/arm64
           # Red Hat UBI 9
           - os: ubi9
             platform: linux/amd64

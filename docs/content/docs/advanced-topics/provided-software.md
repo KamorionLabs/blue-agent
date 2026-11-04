@@ -34,6 +34,22 @@ Softwares are operating system specific. The following table lists the softwares
   - [zip](https://infozip.sourceforge.net/Zip.html)
   - [zstd](https://github.com/facebook/zstd)
 
+#### Linux Node.js task runners
+
+Linux images ship the Azure Pipelines agent with the Node.js 20 and 24 task runners only. The end-of-life Node.js 6, 10 and 16 runners are not included: glibc flavors use the `pipelines-agent` package, which does not bundle them, and the `alpine` flavor removes them from the musl `vsts-agent` package, as Microsoft publishes no musl `pipelines-agent` package.
+
+Tasks declaring a Node.js 20 or 24 handler are not affected. A task declaring only an end-of-life handler (`Node`, `Node10` or `Node16` in its `task.json`) fails with `This step requires a node version that does not exist in the agent filesystem`. Upgrade the task to a recent major version, or force a supported runner with a pipeline variable (or the same environment variable on the agent, see `extraEnv` in the Helm chart):
+
+```yaml
+# azure-pipelines.yaml (extract)
+variables:
+  AGENT_USE_NODE24: true
+```
+
+{{< callout type="warning" >}}
+`AGENT_USE_NODE24` (or `AGENT_USE_NODE20_1`) runs every Node.js task of the job on that runner. Tasks written for an older Node.js version usually work, but this is not guaranteed.
+{{< /callout >}}
+
 #### Windows
 
 - [Azure Pipelines agent](https://github.com/microsoft/azure-pipelines-agent) + [requirements](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/docker?view=azure-devops#linux)

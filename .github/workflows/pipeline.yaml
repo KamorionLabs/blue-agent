@@ -824,6 +824,23 @@ jobs:
       - name: Clean up disk
         run: Remove-Item -Path C:\hostedtoolcache -Recurse -Force
 
+      # Hosted Windows runners sometimes start without the Docker engine running
+      - name: Start Docker engine
+        run: |
+          $service = Get-Service -Name docker
+          if ($service.Status -ne 'Running') {
+            Write-Host "Docker service is $($service.Status), starting it"
+            Set-Service -Name docker -StartupType Automatic
+            Start-Service -Name docker
+          }
+          $deadline = (Get-Date).AddMinutes(5)
+          while ($true) {
+            docker version --format 'Docker engine {{.Server.Version}}' 2>$null
+            if ($LASTEXITCODE -eq 0) { break }
+            if ((Get-Date) -gt $deadline) { throw "Docker engine is not reachable after 5 minutes" }
+            Start-Sleep -Seconds 5
+          }
+
       # Required for running "cosign" CLI
       - name: Setup Cosign
         if: needs.init.outputs.SIGN == 'true'

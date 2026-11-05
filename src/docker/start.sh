@@ -115,6 +115,8 @@ case "${AZP_AUTH^^}" in
     done
     # Azure DevOps accepts a Microsoft Entra access token in place of a personal access token
     auth_args=(--auth PAT)
+    # Kept as shell variables to configure and remove the agent, but not inherited by the agent and its jobs, where they would override the identity of the pipeline service connections
+    export -n AZURE_AUTHORITY_HOST AZURE_CLIENT_ID AZURE_FEDERATED_TOKEN_FILE AZURE_TENANT_ID
     ;;
   *)
     raise_error "Unsupported AZP_AUTH value (${AZP_AUTH}), use PAT, SP or WI"

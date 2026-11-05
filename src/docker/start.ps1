@@ -96,6 +96,16 @@ if ($azpAuth -eq "PAT") {
   }
   # Azure DevOps accepts a Microsoft Entra access token in place of a personal access token
   $authArgs = @("--auth", "PAT")
+  # Kept in script variables to configure and remove the agent, but not inherited by the agent and its jobs, where they would override the identity of the pipeline service connections
+  $workloadIdentity = @{
+    AuthorityHost      = $Env:AZURE_AUTHORITY_HOST
+    ClientId           = $Env:AZURE_CLIENT_ID
+    FederatedTokenFile = $Env:AZURE_FEDERATED_TOKEN_FILE
+    TenantId           = $Env:AZURE_TENANT_ID
+  }
+  foreach ($name in @("AZURE_AUTHORITY_HOST", "AZURE_CLIENT_ID", "AZURE_FEDERATED_TOKEN_FILE", "AZURE_TENANT_ID")) {
+    Remove-Item "Env:$name"
+  }
 } else {
   Raise-Error "Unsupported AZP_AUTH value ($Env:AZP_AUTH), use PAT, SP or WI"
 }
@@ -104,17 +114,17 @@ if ($azpAuth -eq "PAT") {
 # The projected token is refreshed by the kubelet, so a new access token is requested for each configuration command
 function Get-WorkloadIdentityToken {
   $body = @{
-    client_id             = $Env:AZURE_CLIENT_ID
+    client_id             = $workloadIdentity.ClientId
     scope                 = "499b84ac-1321-427f-aa17-267ca6975798/.default"
     grant_type            = "client_credentials"
     client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
-    client_assertion      = (Get-Content -Raw $Env:AZURE_FEDERATED_TOKEN_FILE).Trim()
+    client_assertion      = (Get-Content -Raw $workloadIdentity.FederatedTokenFile).Trim()
   }
-  $uri = "$($Env:AZURE_AUTHORITY_HOST.TrimEnd('/'))/$($Env:AZURE_TENANT_ID)/oauth2/v2.0/token"
+  $uri = "$($workloadIdentity.AuthorityHost.TrimEnd('/'))/$($workloadIdentity.TenantId)/oauth2/v2.0/token"
   try {
     return (Invoke-RestMethod -Method Post -Uri $uri -Body $body -MaximumRetryCount 3).access_token
   } catch {
-    Raise-Error "Failed to get a Microsoft Entra access token with the workload identity $($Env:AZURE_CLIENT_ID): $($_.Exception.Message)"
+    Raise-Error "Failed to get a Microsoft Entra access token with the workload identity $($workloadIdentity.ClientId): $($_.Exception.Message)"
   }
 }
 

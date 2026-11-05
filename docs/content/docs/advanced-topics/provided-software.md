@@ -2,11 +2,11 @@
 title: Provided software
 ---
 
-Softwares are operating system specific. The following table lists the softwares provided by the agent.
+Softwares are operating system specific. The following lists the softwares provided by the agent, the flavors and their architectures are listed in the [OS support matrix](../../getting-started#os-support-matrix).
 
 #### Linux
 
-- [Azure Pipelines agent](https://github.com/microsoft/azure-pipelines-agent) + [requirements](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/docker?view=azure-devops#linux)
+- [Azure Pipelines agent](https://github.com/microsoft/azure-pipelines-agent) v5 + [requirements](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/docker?view=azure-devops#linux)
 - [BuildKit](https://github.com/moby/buildkit) + requirements ([dbus-user-session](https://dbus.freedesktop.org), [fuse-overlayfs](https://github.com/containers/fuse-overlayfs), [iptables](https://www.netfilter.org/projects/iptables/index.html), [shadow-utils](https://github.com/shadow-maint/shadow), [uidmap](https://github.com/shadow-maint/shadow))
 - Cloud providers CLIs
   - [AWS CLI](https://github.com/aws/aws-cli)
@@ -17,11 +17,11 @@ Softwares are operating system specific. The following table lists the softwares
   - [PowerShell Core](https://github.com/PowerShell/PowerShell)
   - [zsh](https://www.zsh.org)
 - Programming languages
-  - [ASP.NET Core Runtime](https://github.com/dotnet/aspnetcore) ([dedicated section](./build-aspnet.md))
-  - [Python 3](https://python.org) ([dedicated section](./build-python.md))
+  - [ASP.NET Core Runtime](https://github.com/dotnet/aspnetcore) 10.0, 8.0 on `ubi8` and `ubi9` ([dedicated section](../build-aspnet))
+  - [Python 3](https://python.org) ([dedicated section](../build-python))
 - Tools
   - [dnsutils](https://www.isc.org/bind)
-  - [git](https://github.com/git-for-windows/git)
+  - [git](https://git-scm.com)
   - [gzip](https://www.gnu.org/software/gzip)
   - [jq](https://github.com/stedolan/jq)
   - [make](https://www.gnu.org/software/make)
@@ -52,7 +52,7 @@ variables:
 
 #### Windows
 
-- [Azure Pipelines agent](https://github.com/microsoft/azure-pipelines-agent) + [requirements](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/docker?view=azure-devops#linux)
+- [Azure Pipelines agent](https://github.com/microsoft/azure-pipelines-agent) v5 + [requirements](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/docker?view=azure-devops#windows)
 - Cloud providers CLIs
   - [AWS CLI](https://github.com/aws/aws-cli)
   - [Azure CLI](https://github.com/Azure/azure-cli)
@@ -61,8 +61,8 @@ variables:
   - [PowerShell Core](https://github.com/PowerShell/PowerShell) (default)
   - [Windows PowerShell](https://learn.microsoft.com/en-us/powershell/scripting/windows-powershell/install/installing-windows-powershell?view=powershell-7.3)
 - Programming languages
-  - [.NET SDK](https://dotnet.microsoft.com) ([dedicated section](./build-aspnet.md))
-  - [Python 3](https://python.org) ([dedicated section](./build-python.md))
+  - [.NET SDK](https://dotnet.microsoft.com) 10.0 ([dedicated section](../build-aspnet))
+  - [Python 3](https://python.org) ([dedicated section](../build-python))
   - [Visual Studio Build Tools (LTSC 17.12)](https://learn.microsoft.com/en-us/visualstudio/ide/?view=vs-2022) (with `AzureBuildTools`, `VCTools`, `WebBuildTools`, `ManagedDesktopBuildTools`, `OfficeBuildTools` workloads)
 - Tools
   - [git](https://github.com/git-for-windows/git)

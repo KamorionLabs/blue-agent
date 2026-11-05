@@ -59,9 +59,11 @@ menu:
       url: https://learn.microsoft.com/en-us/azure/devops/pipelines/?view=azure-devops
     - name: "Azure DevOps docs ↗"
       url: https://learn.microsoft.com/en-us/azure/devops/?view=azure-devops
+    - name: "Original project ↗"
+      url: https://github.com/clemlesne/blue-agent
 
 params:
-  description: Deploy Azure Pipelines agent on Kubernetes. Easy way. Cheap. Windows and Linux. X64 and ARM compatible.
+  description: Deploy Azure Pipelines agents on Kubernetes, auto-scaled with KEDA. Windows and Linux, amd64 and arm64. KamorionLabs fork of clemlesne/blue-agent.
   navbar:
     logo:
       dark: favicon-dark.svg

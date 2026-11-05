@@ -18,9 +18,12 @@
 - 🏗️ Allow to build containers inside the agent using [BuildKit](https://github.com/moby/buildkit).
 - 💪 Performances can be customized depending of the engineering needs, which goes far beyond the Microsoft-hosted agent.
 - 📵 Can run air-gapped (no internet access).
-- 🔄 Agent register and restart itself.
-- 🔧 Packaged with common automation tools ([jq](https://github.com/stedolan/jq), [PowerShell Core](https://github.com/PowerShell/PowerShell), [Python 3](https://python.org), [rsync](https://rsync.samba.org), ...).
-- 🖥️ Available with [Alpine Linux](https://alpinelinux.org), [Azure Linux](https://github.com/microsoft/azurelinux), [Debian](https://debian.org), [Ubuntu](https://ubuntu.com), [Red Hat Enterprise Linux](https://access.redhat.com/products/red-hat-enterprise-linux) and [Windows Server](https://www.microsoft.com/en-us/windows-server)
+- 🔄 Agent register and restart itself, with the [Azure Pipelines agent](https://github.com/microsoft/azure-pipelines-agent) v5.
+- 🔑 Agents register with a personal access token (PAT), a Microsoft Entra service principal or a workload identity.
+- 📈 Auto-scaling with [KEDA](https://keda.sh), from zero, with scheduled warm agents, an idle timeout and custom triggers.
+- 🪙 Ready for spot nodes, with node selectors, tolerations, affinity, topology spread constraints and priority classes.
+- 🔧 Packaged with common automation tools ([jq](https://github.com/stedolan/jq), [PowerShell Core](https://github.com/PowerShell/PowerShell), [Python 3](https://python.org), [rsync](https://rsync.samba.org), ...) and .NET 10.
+- 🖥️ Available with [Alpine Linux](https://alpinelinux.org), [Azure Linux](https://github.com/microsoft/azurelinux), [Debian](https://debian.org), [Ubuntu](https://ubuntu.com), [Red Hat Enterprise Linux](https://access.redhat.com/products/red-hat-enterprise-linux) and [Windows Server](https://www.microsoft.com/en-us/windows-server), see the [flavors](#flavors).
 
 ## Best practices for safety
 
@@ -30,13 +33,44 @@
 - 🔒 Build authenticity can be cryptographically verified with [Cosign](https://github.com/sigstore/cosign) keyless signatures ([Sigstore](https://www.sigstore.dev)).
 - 🪶 Slim container images by design.
 
+## Flavors
+
+| Flavor         | OS                                 | Arch             |
+| -------------- | ---------------------------------- | ---------------- |
+| `alpine`       | Alpine Linux 3.24                  | `amd64`, `arm64` |
+| `azurelinux3`  | Azure Linux 3                      | `amd64`, `arm64` |
+| `trixie`       | Debian 13 slim                     | `amd64`, `arm64` |
+| `noble`        | Ubuntu 24.04 minimal               | `amd64`, `arm64` |
+| `resolute`     | Ubuntu 26.04 minimal               | `amd64`, `arm64` |
+| `ubi9`         | Red Hat UBI 9 minimal              | `amd64`, `arm64` |
+| `ubi10`        | Red Hat UBI 10 minimal             | `amd64`, `arm64` |
+| `win-ltsc2022` | Windows Server 2022 Core           | `amd64`          |
+| `win-ltsc2025` | Windows Server 2025 Core           | `amd64`          |
+| `bookworm`     | Debian 12 slim (deprecated)        | `amd64`, `arm64` |
+| `jammy`        | Ubuntu 22.04 minimal (deprecated)  | `amd64`, `arm64` |
+| `ubi8`         | Red Hat UBI 8 minimal (deprecated) | `amd64`          |
+
+The `bookworm`, `jammy` and `ubi8` flavors are deprecated and will be removed in v14.0.0, migrate to `trixie`, `noble` or `resolute`, and `ubi9` or `ubi10`. Images are tagged `<flavor>-<version>`, for example `ghcr.io/kamorionlabs/blue-agent:trixie-13.1.0`.
+
 ## How to deploy
 
 [Deployment is available](https://kamorionlabs.github.io/blue-agent/docs/getting-started) using Helm on a Kubernetes cluster or Bicep on Azure Container Apps.
 
-```bash
-helm upgrade --install agent oci://ghcr.io/kamorionlabs/charts/blue-agent
+```yaml
+# values.yaml
+image:
+  flavor: trixie
+pipelines:
+  organizationURL: https://dev.azure.com/your-organization
+  personalAccessToken: your-pat
+  poolName: your-pool
 ```
+
+```bash
+helm upgrade --install agent oci://ghcr.io/kamorionlabs/charts/blue-agent --values values.yaml
+```
+
+Set `image.flavor` explicitly: the chart default, `bookworm`, is deprecated. Add `--version` to pin a release, for example `--version 13.1.0`.
 
 ## Documentation
 

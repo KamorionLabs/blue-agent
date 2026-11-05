@@ -1,6 +1,6 @@
 ---
-next: /security
-prev: /getting-started
+next: /docs/quality
+prev: /docs/getting-started
 title: Advanced topics
 weight: 2
 ---
@@ -8,6 +8,8 @@ weight: 2
 Explore the following sections to learn how to use Blue Agent:
 
 {{< cards >}}
+{{< card link="0-trust" title="0 trust (Azure Key Vault)" icon="lock-closed" >}}
+{{< card link="bicep-deployment" title="Deploy on Azure with Bicep" icon="cloud" >}}
 {{< card link="build-aspnet" title="Build ASP.NET applications" icon="code" >}}
 {{< card link="build-java" title="Build Java applications" icon="code" >}}
 {{< card link="build-python" title="Build Python applications" icon="code" >}}

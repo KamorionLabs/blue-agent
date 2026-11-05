@@ -8,7 +8,7 @@ image:
   pullPolicy: Always
   # Container image repository
   repository: ghcr.io/kamorionlabs/blue-agent
-  # Overrides the image tag, default is the chart "appVersion"
+  # Overrides the image version (tag "<flavor>-<version>"), default is the chart "version"
   version: ""
 
 # Overrides the full name of the release

@@ -1,6 +1,7 @@
 ---
+prev: /docs/security
 title: Troubleshooting
-weight: 4
+weight: 5
 ---
 
 ## Understanding Template Container Behavior
@@ -98,7 +99,7 @@ Error is often due to two things:
 
 ## Namespaces must be set to a non-zero value
 
-This error is due to the fact that BuildKit needs to create a new user namespace, and the default maximum number of namespaces is 0. Value is defined by `user.max_user_namespaces` ([documentation](https://man7.org/linux/man-pages/man7/namespaces.7.html)). You can fix it by setting the value to more than 1000. Issue notably happens on AWS Bottlerocket OS. [See related issue.](https://github.com/clemlesne/blue-agent/issues/19)
+This error is due to the fact that BuildKit needs to create a new user namespace, and the default maximum number of namespaces is 0. Value is defined by `user.max_user_namespaces` ([documentation](https://man7.org/linux/man-pages/man7/namespaces.7.html)). You can fix it by setting the value to more than 1000. Issue notably happens on AWS Bottlerocket OS. [See the related issue in the original project.](https://github.com/clemlesne/blue-agent/issues/19)
 
 We can update dynamically the host system settings with a DaemonSet:
 
@@ -158,4 +159,4 @@ Set a technical pipeline timeout longer than the functional pipeline timeout to 
 
 ## A task fails with `This step requires a node version that does not exist in the agent filesystem`
 
-The task only declares an end-of-life Node.js handler (6, 10 or 16), which Linux images no longer ship, including the `alpine` flavor. Upgrade the task to a recent major version, or force the Node.js 24 runner with the `AGENT_USE_NODE24: true` pipeline variable. See [Node.js task runners](/docs/advanced-topics/provided-software/#linux-nodejs-task-runners).
+The task only declares an end-of-life Node.js handler (6, 10 or 16), which Linux images no longer ship, including the `alpine` flavor. Upgrade the task to a recent major version, or force the Node.js 24 runner with the `AGENT_USE_NODE24: true` pipeline variable. See [Node.js task runners](../advanced-topics/provided-software#linux-nodejs-task-runners).

@@ -17,7 +17,8 @@ set -e
 #
 # Environment variables:
 # - AZP_AGENT_NAME: Agent name (default: hostname)
-# - AZP_AUTH: Authentication used to register the agent, "PAT" or "SP" for a Microsoft Entra service principal (default: PAT)
+# - AZP_AUTH: Authentication used to register the agent, "PAT", "SP" for a Microsoft Entra service principal or "WI" for Microsoft Entra Workload ID (default: PAT)
+# - AZURE_AUTHORITY_HOST, AZURE_CLIENT_ID, AZURE_FEDERATED_TOKEN_FILE, AZURE_TENANT_ID: Workload identity, injected by the Azure Workload Identity webhook (AZP_AUTH=WI)
 # - AZP_CLIENT_ID: Service principal client ID (AZP_AUTH=SP)
 # - AZP_CLIENT_SECRET: Service principal client secret (AZP_AUTH=SP)
 # - AZP_CLIENT_SECRET_FILE: File containing the service principal client secret, used when AZP_CLIENT_SECRET is not set (default: empty)
@@ -105,15 +106,45 @@ case "${AZP_AUTH^^}" in
     client_secret="$AZP_CLIENT_SECRET"
     unset AZP_CLIENT_SECRET
     ;;
+  WI)
+    for name in AZURE_AUTHORITY_HOST AZURE_CLIENT_ID AZURE_FEDERATED_TOKEN_FILE AZURE_TENANT_ID; do
+      if [ -z "${!name}" ]; then
+        raise_error "Missing $name environment variable, required with AZP_AUTH=WI (is the pod labeled for the Azure Workload Identity webhook?)"
+        exit 1
+      fi
+    done
+    # Azure DevOps accepts a Microsoft Entra access token in place of a personal access token
+    auth_args=(--auth PAT)
+    ;;
   *)
-    raise_error "Unsupported AZP_AUTH value (${AZP_AUTH}), use PAT or SP"
+    raise_error "Unsupported AZP_AUTH value (${AZP_AUTH}), use PAT, SP or WI"
     exit 1
     ;;
 esac
 
+# Exchange the federated token of the workload identity for a Microsoft Entra access token to Azure DevOps
+# The projected token is refreshed by the kubelet, so a new access token is requested for each configuration command
+workload_identity_token() {
+  curl --silent --show-error --fail --retry 3 \
+    --request POST "${AZURE_AUTHORITY_HOST%/}/${AZURE_TENANT_ID}/oauth2/v2.0/token" \
+    --data-urlencode "client_id=${AZURE_CLIENT_ID}" \
+    --data-urlencode "scope=499b84ac-1321-427f-aa17-267ca6975798/.default" \
+    --data-urlencode "grant_type=client_credentials" \
+    --data-urlencode "client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer" \
+    --data-urlencode "client_assertion@${AZURE_FEDERATED_TOKEN_FILE}" \
+    | jq --raw-output --exit-status '.access_token'
+}
+
 # Run the agent configuration script with the authentication arguments
 config_agent() {
-  if [ -n "$client_secret" ]; then
+  if [ "${AZP_AUTH^^}" = "WI" ]; then
+    local token
+    if ! token=$(workload_identity_token); then
+      raise_error "Failed to get a Microsoft Entra access token with the workload identity ${AZURE_CLIENT_ID}"
+      return 1
+    fi
+    VSTS_AGENT_INPUT_TOKEN="$token" bash config.sh "$@" "${auth_args[@]}"
+  elif [ -n "$client_secret" ]; then
     VSTS_AGENT_INPUT_CLIENTSECRET="$client_secret" bash config.sh "$@" "${auth_args[@]}"
   else
     bash config.sh "$@" "${auth_args[@]}"

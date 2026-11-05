@@ -79,8 +79,8 @@ Validated authentication type of the agent, "pat" or "servicePrincipal".
 */}}
 {{- define "blue-agent.agentAuthType" -}}
 {{- $type := .Values.pipelines.auth.type | default "pat" }}
-{{- if not (has $type (list "pat" "servicePrincipal")) }}
-{{- fail (printf "Unsupported .Values.pipelines.auth.type %q, use \"pat\" or \"servicePrincipal\"" $type) }}
+{{- if not (has $type (list "pat" "servicePrincipal" "workloadIdentity")) }}
+{{- fail (printf "Unsupported .Values.pipelines.auth.type %q, use \"pat\", \"servicePrincipal\" or \"workloadIdentity\"" $type) }}
 {{- end }}
 {{- $type }}
 {{- end }}
@@ -94,6 +94,15 @@ Validated authentication type of KEDA, "pat", "servicePrincipal" or "workloadIde
 {{- fail (printf "Unsupported .Values.autoscaling.auth.type %q, use \"pat\", \"servicePrincipal\" or \"workloadIdentity\"" $type) }}
 {{- end }}
 {{- $type }}
+{{- end }}
+
+{{/*
+Pod label required by the Azure Workload Identity webhook to inject the federated token, when the agent registers with a workload identity.
+*/}}
+{{- define "blue-agent.workloadIdentityPodLabels" -}}
+{{- if eq (include "blue-agent.agentAuthType" .) "workloadIdentity" }}
+azure.workload.identity/use: "true"
+{{- end }}
 {{- end }}
 
 {{/*
@@ -269,6 +278,10 @@ containers:
           secretKeyRef:
             name: {{ include "blue-agent.secretName" . }}
             key: clientSecret
+      {{- else if eq (include "blue-agent.agentAuthType" .) "workloadIdentity" }}
+      # Microsoft Entra Workload ID allowing the agent to register itself to the pool, the webhook injects the AZURE_* variables
+      - name: AZP_AUTH
+        value: WI
       {{- else if not (and .Values.secret.create .Values.secret.azureKeyVault.enabled (.Capabilities.APIVersions.Has "secrets-store.csi.x-k8s.io/v1")) }}
       # Azure DevOps PAT allowing the agent to register itself to the pool
       - name: AZP_TOKEN

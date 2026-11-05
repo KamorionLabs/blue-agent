@@ -78,6 +78,7 @@ Agents can register with a [Microsoft Entra Workload ID](https://learn.microsoft
 
 1. Install the [Azure Workload Identity webhook](https://azure.github.io/azure-workload-identity/docs/installation.html) on the cluster (built in on AKS with `--enable-workload-identity`).
 2. Create an app registration or a user-assigned managed identity, with one federated credential per service account, issuer being the OIDC issuer URL of the cluster:
+
    - the agents: `system:serviceaccount:<namespace>:<release service account>`;
    - KEDA, to read the queue with the same identity: `system:serviceaccount:<keda namespace>:keda-operator`, with `podIdentity.azureWorkload.enabled: true` in the KEDA chart.
 

@@ -72,6 +72,47 @@ helm upgrade --install agent oci://ghcr.io/kamorionlabs/charts/blue-agent --valu
 
 Set `image.flavor` explicitly: the chart default, `bookworm`, is deprecated. Add `--version` to pin a release, for example `--version 13.1.0`.
 
+### With a workload identity, no PAT nor secret
+
+Agents can register with a [Microsoft Entra Workload ID](https://learn.microsoft.com/en-us/entra/workload-id/workload-identities-overview) instead of a PAT: the agent exchanges the Kubernetes service account token for an Entra access token to Azure DevOps. It works on AKS and on any other cluster (EKS, GKE, on-premises) whose OIDC issuer is trusted by Microsoft Entra ID.
+
+1. Install the [Azure Workload Identity webhook](https://azure.github.io/azure-workload-identity/docs/installation.html) on the cluster (built in on AKS with `--enable-workload-identity`).
+2. Create an app registration or a user-assigned managed identity, with one federated credential per service account, issuer being the OIDC issuer URL of the cluster:
+   - the agents: `system:serviceaccount:<namespace>:<release service account>`;
+   - KEDA, to read the queue with the same identity: `system:serviceaccount:<keda namespace>:keda-operator`, with `podIdentity.azureWorkload.enabled: true` in the KEDA chart.
+
+   ```bash
+   az ad app federated-credential create --id "$APP_ID" --parameters '{
+     "name": "blue-agent",
+     "issuer": "'"$OIDC_ISSUER_URL"'",
+     "subject": "system:serviceaccount:agents:agent-blue-agent",
+     "audiences": ["api://AzureADTokenExchange"]
+   }'
+   ```
+
+3. In Azure DevOps, add the identity to the organization (_Basic_ access level) and give it the _Administrator_ role on the agent pool.
+4. Deploy with `pipelines.auth.type: workloadIdentity`:
+
+```yaml
+# values.yaml
+image:
+  flavor: noble
+pipelines:
+  organizationURL: https://dev.azure.com/your-organization
+  poolName: your-pool
+  auth:
+    type: workloadIdentity
+    clientId: your-client-id
+    # Optional, defaults to the tenant of the webhook
+    tenantId: your-tenant-id
+```
+
+```bash
+helm upgrade --install agent oci://ghcr.io/kamorionlabs/charts/blue-agent --namespace agents --create-namespace --values values.yaml
+```
+
+The chart annotates the service account with the client ID, labels the agent Pods for the webhook and points KEDA to the same identity (`autoscaling.auth`). From 13.2.1, the `AZURE_*` variables injected by the webhook are not passed to the jobs, so the pipeline service connections keep their own identity. The token file stays readable by the jobs: grant the identity nothing more than the agent pool role (see [#22](https://github.com/KamorionLabs/blue-agent/issues/22)). Details, service principal with a secret and KEDA options: [Service principal and workload identity](https://kamorionlabs.github.io/blue-agent/docs/advanced-topics/service-principal/).
+
 ## Documentation
 
 Documentation is available at [kamorionlabs.github.io/blue-agent](https://kamorionlabs.github.io/blue-agent/).

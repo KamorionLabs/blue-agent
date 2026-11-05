@@ -14,7 +14,8 @@
 #
 # Environment variables:
 # - AZP_AGENT_NAME: Agent name (default: hostname)
-# - AZP_AUTH: Authentication used to register the agent, "PAT" or "SP" for a Microsoft Entra service principal (default: PAT)
+# - AZP_AUTH: Authentication used to register the agent, "PAT", "SP" for a Microsoft Entra service principal or "WI" for Microsoft Entra Workload ID (default: PAT)
+# - AZURE_AUTHORITY_HOST, AZURE_CLIENT_ID, AZURE_FEDERATED_TOKEN_FILE, AZURE_TENANT_ID: Workload identity, injected by the Azure Workload Identity webhook (AZP_AUTH=WI)
 # - AZP_CLIENT_ID: Service principal client ID (AZP_AUTH=SP)
 # - AZP_CLIENT_SECRET: Service principal client secret (AZP_AUTH=SP)
 # - AZP_CLIENT_SECRET_FILE: File containing the service principal client secret, used when AZP_CLIENT_SECRET is not set (default: empty)
@@ -86,19 +87,49 @@ if ($azpAuth -eq "PAT") {
   $authArgs = @("--auth", "SP", "--clientid", $Env:AZP_CLIENT_ID, "--tenantid", $Env:AZP_TENANT_ID)
   $clientSecret = $Env:AZP_CLIENT_SECRET
   Remove-Item Env:AZP_CLIENT_SECRET
+} elseif ($azpAuth -eq "WI") {
+  foreach ($name in @("AZURE_AUTHORITY_HOST", "AZURE_CLIENT_ID", "AZURE_FEDERATED_TOKEN_FILE", "AZURE_TENANT_ID")) {
+    $value = [Environment]::GetEnvironmentVariable($name)
+    if ($null -eq $value -or $value -eq "") {
+      Raise-Error "Missing $name environment variable, required with AZP_AUTH=WI (is the pod labeled for the Azure Workload Identity webhook?)"
+    }
+  }
+  # Azure DevOps accepts a Microsoft Entra access token in place of a personal access token
+  $authArgs = @("--auth", "PAT")
 } else {
-  Raise-Error "Unsupported AZP_AUTH value ($Env:AZP_AUTH), use PAT or SP"
+  Raise-Error "Unsupported AZP_AUTH value ($Env:AZP_AUTH), use PAT, SP or WI"
+}
+
+# Exchange the federated token of the workload identity for a Microsoft Entra access token to Azure DevOps
+# The projected token is refreshed by the kubelet, so a new access token is requested for each configuration command
+function Get-WorkloadIdentityToken {
+  $body = @{
+    client_id             = $Env:AZURE_CLIENT_ID
+    scope                 = "499b84ac-1321-427f-aa17-267ca6975798/.default"
+    grant_type            = "client_credentials"
+    client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+    client_assertion      = (Get-Content -Raw $Env:AZURE_FEDERATED_TOKEN_FILE).Trim()
+  }
+  $uri = "$($Env:AZURE_AUTHORITY_HOST.TrimEnd('/'))/$($Env:AZURE_TENANT_ID)/oauth2/v2.0/token"
+  try {
+    return (Invoke-RestMethod -Method Post -Uri $uri -Body $body -MaximumRetryCount 3).access_token
+  } catch {
+    Raise-Error "Failed to get a Microsoft Entra access token with the workload identity $($Env:AZURE_CLIENT_ID): $($_.Exception.Message)"
+  }
 }
 
 # Run the agent configuration script with the authentication arguments
 function Invoke-Config {
-  if ($null -ne $clientSecret) {
+  if ($azpAuth -eq "WI") {
+    $Env:VSTS_AGENT_INPUT_TOKEN = Get-WorkloadIdentityToken
+  } elseif ($null -ne $clientSecret) {
     $Env:VSTS_AGENT_INPUT_CLIENTSECRET = $clientSecret
   }
   try {
     & config.cmd @Args @authArgs
   } finally {
     Remove-Item Env:VSTS_AGENT_INPUT_CLIENTSECRET -ErrorAction SilentlyContinue
+    Remove-Item Env:VSTS_AGENT_INPUT_TOKEN -ErrorAction SilentlyContinue
   }
 }
 

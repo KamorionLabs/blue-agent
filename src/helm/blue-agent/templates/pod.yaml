@@ -5,6 +5,7 @@ metadata:
   name: {{ include "blue-agent.fullname" . }}-{{ .Release.Revision }}
   labels:
     {{- include "blue-agent.labels" . | nindent 4 }}
+    {{- with (include "blue-agent.workloadIdentityPodLabels" . | trim) }}{{ . | nindent 4 }}{{- end }}
   annotations:
     # Cluster autoscaler never evicts this Pod
     cluster-autoscaler.kubernetes.io/safe-to-evict: "false"

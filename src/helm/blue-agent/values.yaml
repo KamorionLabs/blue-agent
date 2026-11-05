@@ -61,7 +61,8 @@ autoscaling:
   auth:
     # Empty to follow "pipelines.auth.type", or "pat" (personalAccessToken), "servicePrincipal" (pipelines.auth service principal, KEDA >= 2.21) or "workloadIdentity" (identity of the KEDA operator)
     type: ""
-    # Client ID of the identity used by the KEDA operator with "workloadIdentity", empty for the KEDA default
+    # Client ID of the identity used by the KEDA operator with "workloadIdentity", defaults to "pipelines.auth.clientId" with a workload identity agent, otherwise the KEDA default
+    # The KEDA operator service account needs its own federated credential on that application
     identityId: null
 
 # Pipeline configuration
@@ -74,11 +75,13 @@ pipelines:
   personalAccessToken: null
   # Authentication used by the agent to register itself in the pool
   auth:
-    # "pat" (personalAccessToken) or "servicePrincipal" (Microsoft Entra service principal with a client secret, agent >= 3.227.1)
+    # "pat" (personalAccessToken), "servicePrincipal" (Microsoft Entra service principal with a client secret, agent >= 3.227.1) or "workloadIdentity" (Microsoft Entra Workload ID, no secret)
+    # "workloadIdentity" requires the Azure Workload Identity webhook on the cluster and a federated credential on the application for the agent service account
+    # The agent exchanges the projected service account token for a Microsoft Entra access token, used in place of a personal access token
     type: pat
-    # Service principal client (application) ID
+    # Client (application) ID of the service principal, or of the workload identity (also used by KEDA when "autoscaling.auth.identityId" is empty)
     clientId: null
-    # Service principal tenant ID
+    # Tenant ID of the service principal, optional with "workloadIdentity" (webhook default)
     tenantId: null
     # Service principal client secret, stored in the Secret with the key "clientSecret"
     clientSecret: null

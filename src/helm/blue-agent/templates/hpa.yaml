@@ -44,7 +44,11 @@ spec:
   # Microsoft Entra Workload ID of the KEDA operator
   podIdentity:
     provider: azure-workload
-    {{- with .Values.autoscaling.auth.identityId }}
+    {{- $identityId := .Values.autoscaling.auth.identityId }}
+    {{- if and (not $identityId) (eq (include "blue-agent.agentAuthType" .) "workloadIdentity") }}
+    {{- $identityId = .Values.pipelines.auth.clientId }}
+    {{- end }}
+    {{- with $identityId }}
     identityId: {{ . | quote }}
     {{- end }}
   {{- end }}
@@ -73,6 +77,7 @@ spec:
       metadata:
         labels:
           {{- include "blue-agent.labels" . | nindent 10 }}
+          {{- with (include "blue-agent.workloadIdentityPodLabels" . | trim) }}{{ . | nindent 10 }}{{- end }}
         annotations:
           # Cluster autoscaler never evicts this Pod
           cluster-autoscaler.kubernetes.io/safe-to-evict: "false"

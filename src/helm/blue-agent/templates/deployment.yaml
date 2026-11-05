@@ -21,6 +21,7 @@ spec:
     metadata:
       labels:
         {{- include "blue-agent.selectorLabels" . | nindent 8 }}
+        {{- with (include "blue-agent.workloadIdentityPodLabels" . | trim) }}{{ . | nindent 8 }}{{- end }}
       annotations:
         # Cluster autoscaler never evicts this Pod
         cluster-autoscaler.kubernetes.io/safe-to-evict: "false"

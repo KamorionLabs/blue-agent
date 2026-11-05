@@ -135,8 +135,8 @@ Blue Agent provides Python pre-installed with specific versions optimized for ea
 
 | Flavor         | Python Version | Installation Method        |
 | -------------- | -------------- | -------------------------- |
-| `win-ltsc2022` | 3.13           | Official Windows installer |
-| `win-ltsc2025` | 3.13           | Official Windows installer |
+| `win-ltsc2022` | 3.14           | Official Windows installer |
+| `win-ltsc2025` | 3.14           | Official Windows installer |
 
 ### Python Path Configuration
 

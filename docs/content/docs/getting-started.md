@@ -13,7 +13,7 @@ weight: 1
 
 Create [a new agent pool](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/pools-queues) in Azure DevOps. Then, create [the personal access token](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/personal-access-token-agent-registration?view=azure-devops), with the scope `agent pools (read & manage)`, allowing access from the agent to Azure DevOps.
 
-On Kubernetes, agents can register with a Microsoft Entra service principal instead of a PAT, [see the dedicated section](../advanced-topics/service-principal).
+On Kubernetes, agents can register without a PAT: with a Microsoft Entra service principal and a client secret, or with a workload identity and no secret at all (see [below](#with-a-workload-identity) and the [dedicated section](../advanced-topics/service-principal)).
 
 ### Deploy
 
@@ -69,6 +69,28 @@ pipelines:
 Set `image.flavor` explicitly, the chart default (`bookworm`) is deprecated, see the [OS support matrix](#os-support-matrix). Details about the Helm configuration [can be found in a dedicated section](../advanced-topics/helm-values).
 
 Auto-scaling requires [KEDA](https://keda.sh) in the cluster (KEDA >= 2.21 for the service principal authentication and for scheduled warm agents), [see scaling](../advanced-topics/scaling). Without KEDA, set `autoscaling.enabled: false` to deploy a fixed number of agents.
+
+#### With a workload identity
+
+The agent exchanges the token of its Kubernetes service account for a Microsoft Entra access token, on AKS or any cluster whose OIDC issuer is trusted by Microsoft Entra ID (EKS, GKE, on-premises). Prerequisites:
+
+- the [Azure Workload Identity webhook](https://azure.github.io/azure-workload-identity/docs/installation.html) on the cluster (built in on AKS with `--enable-workload-identity`);
+- an app registration or a user-assigned managed identity, with a federated credential for the agent service account (`system:serviceaccount:<namespace>:<release service account>`) and one for the KEDA operator (`system:serviceaccount:<keda namespace>:keda-operator`, with `podIdentity.azureWorkload.enabled: true` in the KEDA chart);
+- the identity added to the Azure DevOps organization (_Basic_ access level), with the _Administrator_ role on the agent pool.
+
+```yaml
+# values.yaml
+image:
+  flavor: noble
+pipelines:
+  organizationURL: https://dev.azure.com/your-organization
+  poolName: your-pool
+  auth:
+    type: workloadIdentity
+    clientId: your-client-id
+```
+
+From 13.2.1, the variables injected by the webhook are not passed to the jobs, so the pipeline service connections keep their own identity. Details in [service principal and workload identity](../advanced-topics/service-principal).
 
 ### Install the chart
 

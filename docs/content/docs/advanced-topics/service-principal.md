@@ -82,7 +82,7 @@ pipelines:
 
 The chart annotates the service account with the client ID, labels the agent pods with `azure.workload.identity/use: "true"`, and KEDA follows with its operator identity (`autoscaling.auth.type: workloadIdentity`, `identityId` defaulting to `pipelines.auth.clientId`). The Secret only holds `organizationURL`.
 
-The token file stays readable by the jobs run by the agent, like the cluster credentials of any pod: grant the identity nothing more than the agent pool role.
+The agent and its jobs do not inherit the `AZURE_*` variables injected by the webhook, so tools reading them (the `azurerm` provider and backend, `DefaultAzureCredential`) keep using the identity of the pipeline service connection. The token file stays readable by the jobs run by the agent, like the cluster credentials of any pod: grant the identity nothing more than the agent pool role (isolating it from the jobs is tracked in [#22](https://github.com/KamorionLabs/blue-agent/issues/22)).
 
 #### Container environment variables
 

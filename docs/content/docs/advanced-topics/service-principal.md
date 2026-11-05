@@ -6,10 +6,10 @@ By default, agents register in the pool with a Personal Access Token (PAT), whic
 
 #### What is supported
 
-| Component                                    | PAT           | Service principal (client secret) | Workload identity                           |
-| -------------------------------------------- | ------------- | --------------------------------- | ------------------------------------------- |
-| Agent registration (`pipelines.auth.type`)   | Yes (default) | Yes                               | Yes, no secret                              |
-| KEDA queue polling (`autoscaling.auth.type`) | Yes           | Yes, KEDA >= 2.21                 | Yes, identity of the KEDA operator          |
+| Component                                    | PAT           | Service principal (client secret) | Workload identity                  |
+| -------------------------------------------- | ------------- | --------------------------------- | ---------------------------------- |
+| Agent registration (`pipelines.auth.type`)   | Yes (default) | Yes                               | Yes, no secret                     |
+| KEDA queue polling (`autoscaling.auth.type`) | Yes           | Yes, KEDA >= 2.21                 | Yes, identity of the KEDA operator |
 
 The client secret is only used to register and remove the agent: it is passed to the agent configuration through the environment, and removed from the environment of the jobs. KEDA and the agents can use different authentications, for example a service principal for the agents and a read-only PAT, or the KEDA operator identity, for the queue.
 
